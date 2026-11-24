@@ -154,13 +154,13 @@ agent-device open com.example.myapp
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `connect x86sim` says the server is not reachable | The server is not running, or the port is not forwarded | Start the server (Linux step 5). Check `curl localhost:4723/status` on the machine that runs agent-device. |
-| `snapshot -i` lists only `[application]` | The hook is not loaded, or accessibility is off | Repeat Linux steps 3 and 4. Stop the phone first with `A64_STOP_ONLY=1` in place of `A64_KEEP=1`. |
-| `--provider-app is not supported by x86Sim` | The plugin version is older than this fix | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon. |
-| A screenshot shows the screen from before the last `press` | The phone has not drawn the new frame yet | Wait 2 seconds and take the screenshot again. |
-| `connect x86sim` is not a known provider | The daemon started before you installed the plugin | Stop the agent-device daemon and run the command again. |
+| Symptom                                                    | Cause                                                   | Fix                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `connect x86sim` says the server is not reachable          | The server is not running, or the port is not forwarded | Start the server (Linux step 5). Check `curl localhost:4723/status` on the machine that runs agent-device. |
+| `snapshot -i` lists only `[application]`                   | The hook is not loaded, or accessibility is off         | Repeat Linux steps 3 and 4. Stop the phone first with `A64_STOP_ONLY=1` in place of `A64_KEEP=1`.          |
+| `--provider-app is not supported by x86Sim`                | The plugin version is older than this fix               | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon.            |
+| A screenshot shows the screen from before the last `press` | The phone has not drawn the new frame yet               | Wait 2 seconds and take the screenshot again.                                                              |
+| `connect x86sim` is not a known provider                   | The daemon started before you installed the plugin      | Stop the agent-device daemon and run the command again.                                                    |
 
 ## Limits
 
