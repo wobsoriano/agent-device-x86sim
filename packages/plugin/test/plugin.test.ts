@@ -53,3 +53,29 @@ test('snapshot keeps the engine default, because the tree is real', async () => 
   assert.ok('webDriver' in setup);
   assert.equal(setup.webDriver.capabilityOverrides?.snapshot, undefined);
 });
+
+const remoteHost = { ...host, env: { X86SIM_WEBDRIVER_ENDPOINT: 'http://sim:1' } };
+
+test('with an endpoint set, a session uses the endpoint as is and starts nothing', async () => {
+  const setup = await x86sim().setup(remoteHost as never);
+  assert.ok('webDriver' in setup);
+  const base = { provider: 'x86sim', endpoint: 'http://sim:1' };
+  const prepared = await setup.webDriver.prepareSession?.({ base, lease: {} } as never);
+  assert.deepEqual(prepared, base);
+  await setup.dispose?.();
+});
+
+test('connect names the fix when the server is not reachable', async () => {
+  const connection = x86sim({ endpoint: 'http://127.0.0.1:1' }).connection;
+  assert.ok(connection);
+  const createError = (_code: string, message: string) => new Error(message);
+  await assert.rejects(
+    connection.verify({ flags: {} as never, env: {}, host: { ...host, createError } as never }),
+    (error: Error) => {
+      assert.match(error.message, /not reachable at http:\/\/127\.0\.0\.1:1\/status/);
+      assert.match(error.message, /npx agent-device-x86sim serve/);
+      assert.match(error.message, /4723/);
+      return true;
+    },
+  );
+});

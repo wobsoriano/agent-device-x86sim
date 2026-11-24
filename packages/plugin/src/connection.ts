@@ -1,4 +1,6 @@
+import path from 'node:path';
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
+import { findAutoTarget } from './auto-start.ts';
 import { X86SIM_PROFILE_FIELDS } from './profile-fields.ts';
 
 type Connection = NonNullable<AgentDevicePlugin['connection']>;
@@ -48,6 +50,16 @@ export function createConnection(options: { endpoint?: string | undefined }): Co
       };
     },
     verify: async ({ flags, env, host }) => {
+      const target = await findAutoTarget(options.endpoint, env);
+      if (target) {
+        return {
+          provider: PROVIDER,
+          service: SERVICE,
+          verificationMessage: `${SERVICE} is installed here (${target.appImage}, phone ${path.basename(target.device)}). The server and the phone start when the first session opens, which can take 1.5 to 6 minutes.`,
+          device: { status: 'verified', name: flags.device ?? DEFAULT_DEVICE, platform: 'ios' },
+          app: { status: 'deferred' },
+        };
+      }
       const endpoint = resolveEndpoint(options.endpoint, env);
       const statusUrl = new URL('status', endpoint.endsWith('/') ? endpoint : `${endpoint}/`);
       let ready: unknown;
@@ -56,9 +68,13 @@ export function createConnection(options: { endpoint?: string | undefined }): Co
         const body = (await response.json()) as { value?: { ready?: unknown } };
         ready = response.ok ? body.value?.ready : undefined;
       } catch (error) {
-        throw host.createError('COMMAND_FAILED', `${SERVICE} WebDriver server is not reachable at ${statusUrl.href}.`, {
-          cause: String(error),
-        });
+        throw host.createError(
+          'COMMAND_FAILED',
+          `${SERVICE} WebDriver server is not reachable at ${statusUrl.href}. ` +
+            'Run `npx agent-device-x86sim serve` on the Linux machine that has x86Sim, and forward its port 4723 to this machine. ' +
+            'On that Linux machine, install x86Sim and create a phone, and agent-device starts the server by itself.',
+          { cause: String(error) },
+        );
       }
       if (ready !== true) {
         throw host.createError(
