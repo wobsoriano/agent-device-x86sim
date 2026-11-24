@@ -13,7 +13,7 @@ agent-device + plugin  ──HTTP──▶  server  ──▶  x86Sim  ──▶
 - agent-device sends its commands to a WebDriver server. The plugin tells agent-device where that server is.
 - The server runs on the Linux machine next to x86Sim. It turns WebDriver requests into x86Sim input and screenshots.
 - The accessibility hook, `libx86sim-ax.dylib`, runs inside the phone. It gives the server the list of elements on the screen. `snapshot -i` prints that list.
-- The package `agent-device-x86sim` holds all three. It has the plugin, the server, the hook, and the `agent-device-x86sim` command.
+- The package `agent-device-x86sim` has the plugin, the server, the hook, and the `agent-device-x86sim` command.
 
 When agent-device runs on the Linux machine, the plugin starts the server and boots the phone for you. When agent-device runs on another machine, you start the server yourself with one command.
 
@@ -128,7 +128,7 @@ agent-device sends its commands to a WebDriver server that runs next to the simu
 
 4. Use agent-device as in the section above, from `open` on.
 
-Options of `serve`.
+`serve` takes these options.
 
 | Option               | Meaning                                                                           |
 | -------------------- | --------------------------------------------------------------------------------- |
