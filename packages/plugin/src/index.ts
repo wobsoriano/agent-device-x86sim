@@ -1,7 +1,7 @@
 import type { AgentDevicePlugin } from 'agent-device/plugins';
 import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
 import { createAutoServer, findAutoTarget } from './auto-start.ts';
-import { DEFAULT_DEVICE, PROVIDER, createConnection, resolveEndpoint } from './connection.ts';
+import { DEFAULT_DEVICE, PROVIDER, chosenPhone, createConnection, resolveEndpoint } from './connection.ts';
 import { X86SIM_PROFILE_FIELDS } from './profile-fields.ts';
 
 export type X86SimOptions = {
@@ -46,8 +46,8 @@ export default function x86sim(options: X86SimOptions = {}): AgentDevicePlugin {
             'appium:deviceName': DEFAULT_DEVICE,
           },
           capabilityOverrides: CAPABILITY_OVERRIDES,
-          prepareSession: async ({ base }) => {
-            const target = await findAutoTarget(options.endpoint, host.env);
+          prepareSession: async ({ base, req }) => {
+            const target = await findAutoTarget(options.endpoint, host.env, chosenPhone(req?.flags?.device));
             return target ? { ...base, endpoint: await auto.endpoint(target) } : base;
           },
         },

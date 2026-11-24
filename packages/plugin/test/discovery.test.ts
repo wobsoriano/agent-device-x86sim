@@ -1,119 +1,174 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
-import { findAppImage, findDevice, newestAppImage, x86simDataDir } from '../src/cli/discovery.ts';
+import { NotSetUpError, findPhone, findX86Sim } from '../src/cli/discovery.ts';
 import type { Environment } from '../src/cli/discovery.ts';
 
-/** A machine whose folders hold the given names, and whose executables are the given files. */
-function machine(
-  folders: Record<string, string[]>,
-  options: { env?: Record<string, string>; executable?: string[] } = {},
-): Environment {
+const DATA = '/home/u/.local/share/x86sim';
+const VAR = `${DATA}/var`;
+
+type Machine = {
+  /** Folder to its entries. */
+  folders?: Record<string, string[]>;
+  files?: Record<string, string>;
+  links?: Record<string, string>;
+  env?: Record<string, string>;
+  running?: string[];
+  executable?: string[];
+};
+
+function machine(setup: Machine = {}): Environment {
   return {
-    env: options.env ?? {},
+    env: setup.env ?? {},
     home: '/home/u',
     cwd: '/work',
-    listDir: async (dir) => folders[dir] ?? [],
-    isExecutable: async (file) => (options.executable ? options.executable.includes(file) : true),
+    listDir: async (dir) => setup.folders?.[dir] ?? [],
+    readText: async (file) => setup.files?.[file],
+    readLink: async (file) => setup.links?.[file],
+    isExecutable: async (file) => setup.executable?.includes(file) ?? false,
+    isRunning: async (device) => setup.running?.includes(device) ?? false,
   };
 }
 
-test('the newest AppImage wins by version number, not by name order', async () => {
-  const found = await newestAppImage(['/home/u/x86sim', '/home/u/Downloads'], async (dir) =>
-    dir === '/home/u/x86sim'
-      ? ['x86sim-0.9.1-x86_64.AppImage', 'notes.txt']
-      : ['x86sim-0.10.0-x86_64.AppImage', 'x86sim-0.5.3-x86_64.AppImage'],
+/** A data folder with the given app versions, each complete. */
+const installed = (versions: string[], extra: Machine = {}): Machine => ({
+  ...extra,
+  folders: {
+    [`${DATA}/app`]: versions,
+    ...Object.fromEntries(versions.map((version) => [`${DATA}/app/${version}`, ['cli', '.complete']])),
+    ...extra.folders,
+  },
+});
+
+test('without an AppImage, the newest complete copy in the data folder is used', async () => {
+  const x86sim = await findX86Sim(
+    undefined,
+    machine({
+      ...installed(['0.4.0', '0.5.3']),
+      files: { [`${DATA}/app/0.5.3/DARLING_ID`]: 'id-053\n' },
+      links: { [`${DATA}/darling-prefix`]: 'app/0.5.3/darling-userns' },
+      env: { PATH: '/usr/bin' },
+    }),
   );
-  assert.equal(found, '/home/u/Downloads/x86sim-0.10.0-x86_64.AppImage');
+  const launch = x86sim.cli(['device', 'list']);
+  assert.equal(launch.command, `${DATA}/app/0.5.3/cli/x86sim`);
+  assert.equal(launch.env.X86SIM_DARLING_ID, 'id-053');
+  assert.equal(launch.env.X86SIM_DARLING_MODE, 'userns');
+  assert.equal(launch.env.PATH, `${DATA}/app/0.5.3/bin:/usr/bin`);
+  assert.equal(x86sim.dataDir, DATA);
 });
 
-test('with the same version in two folders, the earlier folder wins', async () => {
-  const found = await newestAppImage(['/a', '/b'], async () => ['x86sim-0.5.3-x86_64.AppImage']);
-  assert.equal(found, '/a/x86sim-0.5.3-x86_64.AppImage');
+test('a copy that was not finished is skipped', async () => {
+  const setup = installed(['0.4.0', '0.5.3']);
+  setup.folders![`${DATA}/app/0.5.3`] = ['cli'];
+  assert.match((await findX86Sim(undefined, machine(setup))).label, /x86Sim 0\.4\.0/);
 });
 
-test('files that are not x86Sim AppImages are ignored', async () => {
-  const found = await newestAppImage(['/a'], async () => [
-    'x86sim-0.5.3-x86_64.AppImage.zsync',
-    'x86sim.AppImage',
-    'other-1.0-x86_64.AppImage',
-  ]);
-  assert.equal(found, undefined);
-});
-
-test('--appimage wins over the environment, and the environment wins over the folders', async () => {
-  const environment = machine(
-    { '/home/u/x86sim': ['x86sim-0.5.3-x86_64.AppImage'] },
-    { env: { X86SIM_APPIMAGE: '/env/x86sim.AppImage' } },
+test('the system Darling mode is used unless the prefix link points into the copy', async () => {
+  const system = await findX86Sim(
+    undefined,
+    machine(installed(['0.5.3'], { links: { [`${DATA}/darling-prefix`]: '../../../opt/x86sim/darling' } })),
   );
-  assert.equal(await findAppImage('/flag/x86sim.AppImage', environment), '/flag/x86sim.AppImage');
-  assert.equal(await findAppImage(undefined, environment), '/env/x86sim.AppImage');
-  assert.equal(
-    await findAppImage(undefined, machine({ '/home/u/x86sim': ['x86sim-0.5.3-x86_64.AppImage'] })),
-    '/home/u/x86sim/x86sim-0.5.3-x86_64.AppImage',
-  );
+  assert.equal(system.cli([]).env.X86SIM_DARLING_MODE, 'system');
+  const forced = await findX86Sim(undefined, machine(installed(['0.5.3'], { env: { X86SIM_DARLING_MODE: 'userns' } })));
+  assert.equal(forced.cli([]).env.X86SIM_DARLING_MODE, 'userns');
 });
 
-test('a relative --appimage is read from the current folder', async () => {
-  assert.equal(await findAppImage('./x86sim.AppImage', machine({ '/work': [] })), '/work/x86sim.AppImage');
+test('X86SIM_DATA moves the data folder', async () => {
+  const setup = installed([], { env: { X86SIM_DATA: '/mine' } });
+  setup.folders!['/mine/app'] = ['0.5.3'];
+  setup.folders!['/mine/app/0.5.3'] = ['.complete'];
+  assert.equal((await findX86Sim(undefined, machine(setup))).dataDir, '/mine');
 });
 
-test('no AppImage names every folder it looked in and where to download one', async () => {
-  await assert.rejects(findAppImage(undefined, machine({})), (error: Error) => {
-    for (const folder of ['/home/u/x86sim', '/home/u/Applications', '/home/u/Downloads', '/work']) {
-      assert.match(error.message, new RegExp(folder));
-    }
-    assert.match(error.message, /github\.com\/x86sim\/x86sim\/releases/);
-    assert.match(error.message, /--appimage/);
+test('no data folder means x86Sim is not set up, and says where to start', async () => {
+  await assert.rejects(findX86Sim(undefined, machine()), (error: Error) => {
+    assert.ok(error instanceof NotSetUpError);
+    assert.equal(error.message, 'x86Sim is not set up. Follow https://github.com/x86sim/x86sim#quick-start');
     return true;
   });
+});
+
+test('--appimage wins over X86SIM_APPIMAGE, which wins over the data folder', async () => {
+  const setup = installed(['0.5.3'], {
+    env: { X86SIM_APPIMAGE: '/env/x86sim.AppImage' },
+    executable: ['/flag/x86sim.AppImage', '/env/x86sim.AppImage', '/work/rel.AppImage'],
+  });
+  assert.equal((await findX86Sim('/flag/x86sim.AppImage', machine(setup))).label, '/flag/x86sim.AppImage');
+  assert.equal((await findX86Sim(undefined, machine(setup))).label, '/env/x86sim.AppImage');
+  assert.equal((await findX86Sim('./rel.AppImage', machine(setup))).label, '/work/rel.AppImage');
 });
 
 test('an AppImage that is not executable says to chmod it', async () => {
-  const environment = machine({ '/home/u/x86sim': ['x86sim-0.5.3-x86_64.AppImage'] }, { executable: [] });
-  await assert.rejects(
-    findAppImage(undefined, environment),
-    /chmod \+x \/home\/u\/x86sim\/x86sim-0\.5\.3-x86_64\.AppImage/,
-  );
+  await assert.rejects(findX86Sim('/dl/x86sim.AppImage', machine()), /chmod \+x \/dl\/x86sim\.AppImage/);
 });
 
-test('the data folder follows XDG_DATA_HOME, else ~/.local/share', () => {
-  assert.equal(x86simDataDir({ env: {}, home: '/home/u' }), '/home/u/.local/share/x86sim');
-  assert.equal(x86simDataDir({ env: { XDG_DATA_HOME: '/data' }, home: '/home/u' }), '/data/x86sim');
+const phones = (entries: Record<string, string>, extra: Machine = {}): Machine => ({
+  ...extra,
+  folders: { [VAR]: ['run', 'run-a64', ...Object.keys(entries)], ...extra.folders },
+  files: {
+    ...Object.fromEntries(Object.entries(entries).map(([folder, name]) => [`${VAR}/${folder}/name`, `${name}\n`])),
+    ...extra.files,
+  },
 });
 
-const VAR = '/home/u/.local/share/x86sim/var';
-const APPIMAGE = '/home/u/x86sim/x86sim-0.5.3-x86_64.AppImage';
+const PRO = 'device-a64-iphone-17-pro';
+const SE = 'device-a64-iphone-se';
 
-test('the only phone is chosen without a flag, and run folders are not phones', async () => {
-  const environment = machine({ [VAR]: ['device-a64-iphone-17-pro', 'run', 'run-a64', 'run-a64-iphone-17-pro'] });
-  assert.equal(await findDevice(undefined, APPIMAGE, environment), `${VAR}/device-a64-iphone-17-pro`);
+test('the only phone is chosen, and run folders are not phones', async () => {
+  const phone = await findPhone(undefined, DATA, machine(phones({ [PRO]: 'iPhone 17 Pro' })));
+  assert.deepEqual(phone, { folder: PRO, path: `${VAR}/${PRO}`, name: 'iPhone 17 Pro' });
 });
 
-test('no phone names the command that creates one', async () => {
-  await assert.rejects(findDevice(undefined, APPIMAGE, machine({ [VAR]: ['run'] })), (error: Error) => {
-    assert.match(error.message, new RegExp(VAR));
-    assert.match(error.message, /x86sim device create --model "iPhone 17 Pro"/);
+test('a phone without a name file is shown by its folder', async () => {
+  const phone = await findPhone(undefined, DATA, machine({ folders: { [VAR]: [PRO] } }));
+  assert.equal(phone.name, PRO);
+});
+
+test('with two phones, the one that runs is chosen', async () => {
+  const setup = phones({ [PRO]: 'iPhone 17 Pro', [SE]: 'iPhone SE' }, { running: [`${VAR}/${SE}`] });
+  assert.equal((await findPhone(undefined, DATA, machine(setup))).name, 'iPhone SE');
+});
+
+test('with two phones and none running, the error lists the names and the command that picks one', async () => {
+  const setup = phones({ [PRO]: 'iPhone 17 Pro', [SE]: 'iPhone SE' });
+  await assert.rejects(findPhone(undefined, DATA, machine(setup)), (error: Error) => {
+    assert.match(error.message, /"iPhone 17 Pro", "iPhone SE"/);
+    assert.match(error.message, /agent-device connect x86sim --device "iPhone 17 Pro"/);
     return true;
   });
 });
 
-test('two phones need --device, and the message lists them', async () => {
-  const environment = machine({ [VAR]: ['device-a64-iphone-17-pro', 'device-a64-iphone-se'] });
+test('two phones that run is also a choice to make', async () => {
+  const setup = phones({ [PRO]: 'iPhone 17 Pro', [SE]: 'iPhone SE' }, { running: [`${VAR}/${PRO}`, `${VAR}/${SE}`] });
+  await assert.rejects(findPhone(undefined, DATA, machine(setup)), /More than one phone runs/);
+});
+
+test('no phone says where to create one', async () => {
+  await assert.rejects(findPhone(undefined, DATA, machine(phones({}))), /No phone found in .*Setup page.*quick-start/);
+});
+
+test('--device matches the name the launcher shows, in any case, or the folder name', async () => {
+  const setup = phones({ [PRO]: 'iPhone 17 Pro', [SE]: 'iPhone SE' });
+  assert.equal((await findPhone('iphone se', DATA, machine(setup))).folder, SE);
+  assert.equal((await findPhone('iPhone 17 Pro', DATA, machine(setup))).folder, PRO);
+  assert.equal((await findPhone(PRO, DATA, machine(setup))).folder, PRO);
+});
+
+test('--device that matches nothing lists the phones', async () => {
+  const setup = phones({ [PRO]: 'iPhone 17 Pro', [SE]: 'iPhone SE' });
   await assert.rejects(
-    findDevice(undefined, APPIMAGE, environment),
-    /device-a64-iphone-17-pro, device-a64-iphone-se.*--device/,
+    findPhone('iPad', DATA, machine(setup)),
+    /No phone is named "iPad". The phones are "iPhone 17 Pro", "iPhone SE"/,
   );
 });
 
-test('--device takes a name or a folder, and checks that it is a phone', async () => {
-  const environment = machine({
-    [VAR]: ['device-a64-iphone-17-pro', 'device-a64-iphone-se'],
-    [`${VAR}/device-a64-iphone-se`]: ['sim.env', 'data'],
-    '/elsewhere/phone': ['sim.env'],
-    '/empty': [],
-  });
-  assert.equal(await findDevice('device-a64-iphone-se', APPIMAGE, environment), `${VAR}/device-a64-iphone-se`);
-  assert.equal(await findDevice('/elsewhere/phone', APPIMAGE, environment), '/elsewhere/phone');
-  await assert.rejects(findDevice('/empty', APPIMAGE, environment), /no sim\.env.*device list/);
-  await assert.rejects(findDevice('device-a64-missing', APPIMAGE, environment), /no sim\.env/);
+test('two phones with one name need a folder name', async () => {
+  const setup = phones({ [PRO]: 'iPhone', [SE]: 'iPhone' });
+  await assert.rejects(findPhone('iPhone', DATA, machine(setup)), new RegExp(`${PRO}, ${SE}`));
+});
+
+test('--device with a path takes a phone folder, and checks that it is one', async () => {
+  const setup: Machine = { folders: { '/elsewhere/phone': ['sim.env'], '/empty': [] } };
+  assert.equal((await findPhone('/elsewhere/phone', DATA, machine(setup))).path, '/elsewhere/phone');
+  await assert.rejects(findPhone('/empty', DATA, machine(setup)), /no sim\.env/);
 });

@@ -1,21 +1,29 @@
 import type { RunningServer, StartOptions } from './cli/start-server.ts';
+import { NotSetUpError } from './cli/discovery.ts';
 import { discoverTarget } from './cli/system.ts';
 import type { Target } from './cli/system.ts';
 
 /**
  * The phone to start a server for, when agent-device runs on the machine that has x86Sim. That
- * is a Linux machine where no server address was given and x86Sim is installed with a phone.
- * Anything else means a server runs somewhere else, and `undefined` leaves the address alone.
+ * is a Linux machine where no server address was given and x86Sim is set up. Anything else means
+ * a server runs somewhere else, and `undefined` leaves the address alone. A machine that has
+ * x86Sim but no phone, or several phones to choose from, is an error that names the fix.
  */
 export async function findAutoTarget(
   endpoint: string | undefined,
   env: Readonly<Record<string, string | undefined>>,
+  device: string | undefined,
   platform: NodeJS.Platform = process.platform,
   discover: typeof discoverTarget = discoverTarget,
 ): Promise<Target | undefined> {
   if (endpoint ?? env.X86SIM_WEBDRIVER_ENDPOINT) return undefined;
   if (platform !== 'linux') return undefined;
-  return await discover({ appimage: env.X86SIM_APPIMAGE }).catch(() => undefined);
+  try {
+    return await discover({ appimage: env.X86SIM_APPIMAGE, device });
+  } catch (error) {
+    if (error instanceof NotSetUpError) return undefined;
+    throw error;
+  }
 }
 
 type StartServer = (options: StartOptions) => Promise<RunningServer>;

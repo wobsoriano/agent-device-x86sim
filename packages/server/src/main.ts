@@ -30,8 +30,9 @@ function createBackend(): { backend: Backend; extraRoutes: Route[] } {
     }
     case 'x86sim': {
       if (!values.appimage || !values.device) fail('--backend x86sim needs --appimage <path> and --device <dir>.');
+      const appImage = path.resolve(values.appimage);
       const backend = new X86SimBackend({
-        appImage: path.resolve(values.appimage),
+        cli: (args) => ({ command: appImage, args: ['x86sim', ...args] }),
         device: path.resolve(values.device),
       });
       return { backend, extraRoutes: [] };

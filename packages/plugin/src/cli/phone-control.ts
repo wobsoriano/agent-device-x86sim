@@ -1,15 +1,16 @@
 import { spawn } from 'node:child_process';
-import { readFile, readdir, realpath } from 'node:fs/promises';
-import { createConnection } from 'node:net';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { SPRINGBOARD_BUNDLE_ID, hookSocketNames, queryHook } from '../../../server/src/backends/ax-hook.ts';
 import { defaultHookSocketDir } from '../../../server/src/backends/x86sim.ts';
 import { parseSimulatorUdid } from '../../../server/src/backends/simhid.ts';
 import { ACCESSIBILITY_PREFS_SCRIPT } from './accessibility-prefs.ts';
+import type { Launch, X86Sim } from './install.ts';
 import type { Action, PhoneControl, PhoneState } from './phone.ts';
+import { isPhoneRunning } from './running.ts';
 
 export type PhoneControlConfig = {
-  appImage: string;
+  x86sim: X86Sim;
   /** The phone's folder. Absolute. */
   device: string;
   /** The accessibility hook to load at boot. */
@@ -23,7 +24,6 @@ export type PhoneControlConfig = {
   hasGpu?: () => Promise<boolean>;
 };
 
-const BOOT_SCRIPT = 'cli/libexec/arm64/boot-a64.sh';
 /** x86Sim's `wait home` limit in seconds. */
 const HOME_TIMEOUT_S = 540;
 const HOOK_WAIT_MS = 90_000;
@@ -40,14 +40,13 @@ type Finished = { code: number | null; tail: string };
  * Runs a command to its exit. It waits for `exit`, not `close`, because the boot script leaves
  * the phone running and the phone's processes keep the output pipes open.
  */
-function run(
-  command: string,
-  args: string[],
-  env: NodeJS.ProcessEnv,
-  stream: ((text: string) => void) | undefined,
-): Promise<Finished> {
+function run(launch: Launch, stream: ((text: string) => void) | undefined): Promise<Finished> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(launch.command, launch.args, {
+      env: { ...process.env, ...launch.env },
+      ...(launch.cwd === undefined ? {} : { cwd: launch.cwd }),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     let output = '';
     const collect = (chunk: Buffer) => {
       const text = chunk.toString('utf8');
@@ -68,7 +67,10 @@ function run(
 }
 
 async function runPython(args: string[]): Promise<string> {
-  const finished = await run('python3', ['-I', '-c', ACCESSIBILITY_PREFS_SCRIPT, ...args], {}, undefined);
+  const finished = await run(
+    { command: 'python3', args: ['-I', '-c', ACCESSIBILITY_PREFS_SCRIPT, ...args], env: {} },
+    undefined,
+  );
   if (finished.code !== 0)
     throw new Error(`Could not read or write the phone's accessibility preferences.\n${finished.tail}`);
   return finished.tail;
@@ -81,27 +83,10 @@ export function createPhoneControl(config: PhoneControlConfig): PhoneControl {
   const x86simEnv = { X86SIM_DEVICE: config.device };
   const bootEnv = { A64_DEVICE: config.device, X86SIM_DEVICE: config.device };
 
-  async function script(env: NodeJS.ProcessEnv, what: string): Promise<void> {
-    const finished = await run(config.appImage, ['shell', '-c', BOOT_SCRIPT], env, stream);
+  async function script(env: Record<string, string>, what: string): Promise<void> {
+    const launch = config.x86sim.boot();
+    const finished = await run({ ...launch, env: { ...launch.env, ...env } }, stream);
     if (finished.code !== 0) throw new Error(`x86Sim failed to ${what} (exit ${finished.code}).\n${finished.tail}`);
-  }
-
-  async function isRunning(): Promise<boolean> {
-    try {
-      const socketPath = await realpath(path.join(config.device, 'data', 'simhid.sock'));
-      return await new Promise<boolean>((resolve) => {
-        const socket = createConnection(socketPath);
-        const done = (answer: boolean) => {
-          socket.destroy();
-          resolve(answer);
-        };
-        socket.setTimeout(PROBE_TIMEOUT_MS, () => done(false));
-        socket.once('connect', () => done(true));
-        socket.once('error', () => done(false));
-      });
-    } catch {
-      return false;
-    }
   }
 
   async function isHooked(): Promise<boolean> {
@@ -136,7 +121,7 @@ export function createPhoneControl(config: PhoneControlConfig): PhoneControl {
 
   return {
     async observe(): Promise<PhoneState> {
-      const running = await isRunning();
+      const running = await isPhoneRunning(config.device);
       return {
         running,
         hooked: running && (await isHooked()),
@@ -158,12 +143,8 @@ export function createPhoneControl(config: PhoneControlConfig): PhoneControl {
           );
         }
         case 'wait-home': {
-          const finished = await run(
-            config.appImage,
-            ['x86sim', 'wait', 'home', String(HOME_TIMEOUT_S)],
-            x86simEnv,
-            stream,
-          );
+          const launch = config.x86sim.cli(['wait', 'home', String(HOME_TIMEOUT_S)]);
+          const finished = await run({ ...launch, env: { ...launch.env, ...x86simEnv } }, stream);
           if (finished.code !== 0)
             throw new Error(`The phone did not reach the home screen in ${HOME_TIMEOUT_S} s.\n${finished.tail}`);
           return;

@@ -57,8 +57,11 @@ export async function preparePhone(control: PhoneControl, log: (line: string) =>
       return;
     }
     if (phase === 'stale') {
-      const missing = [state.hooked ? undefined : 'the hook', state.axPrefs ? undefined : 'accessibility'];
-      log(`The phone is running without ${missing.filter(Boolean).join(' and ')}.`);
+      const reasons = [
+        state.hooked ? undefined : 'load the accessibility hook',
+        state.axPrefs ? undefined : 'turn on accessibility',
+      ];
+      log(`Restarting the phone to ${reasons.filter(Boolean).join(' and ')}.`);
     }
     for (const action of PLAN[phase]) {
       log(PROGRESS[action]);

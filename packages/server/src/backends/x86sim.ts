@@ -9,9 +9,12 @@ import { buttonSteps, parseSimEnv, parseSimulatorUdid, pointSize, touchSteps } f
 import type { SimhidStep } from './simhid.ts';
 import { readFrontTree } from './ax-hook.ts';
 
+/** A command to spawn. */
+export type CliLaunch = { command: string; args: string[]; env?: Record<string, string> };
+
 export type X86SimConfig = {
-  /** The x86Sim AppImage. It runs `x86sim <command>` for everything but touch and buttons. */
-  appImage: string;
+  /** Builds the launch of `x86sim <args>`, which does everything but touch and buttons. */
+  cli: (args: string[]) => CliLaunch;
   /** A phone's directory, such as `var/device-a64-iphone-17-pro`. Absolute. */
   device: string;
   /** Where the accessibility hooks bind their sockets. Defaults to `/run/user/<uid>`. */
@@ -45,10 +48,11 @@ export class X86SimBackend implements Backend {
 
   #cli(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
+      const launch = this.#config.cli(args);
       execFile(
-        this.#config.appImage,
-        ['x86sim', ...args],
-        { env: { ...process.env, X86SIM_DEVICE: this.#config.device }, timeout: CLI_TIMEOUT_MS },
+        launch.command,
+        launch.args,
+        { env: { ...process.env, ...launch.env, X86SIM_DEVICE: this.#config.device }, timeout: CLI_TIMEOUT_MS },
         (error, stdout, stderr) => {
           if (error) reject(new Error(`x86sim ${args[0]} failed: ${stderr.trim() || error.message}`));
           else resolve(stdout);

@@ -1,41 +1,58 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
 import { createAutoServer, findAutoTarget } from '../src/auto-start.ts';
+import { NotSetUpError } from '../src/cli/discovery.ts';
 import type { RunningServer } from '../src/cli/start-server.ts';
 
-const TARGET = { appImage: '/x/x86sim.AppImage', device: '/x/var/device-a64-iphone-17-pro' };
+const TARGET = {
+  x86sim: {
+    label: 'x86Sim 0.5.3',
+    dataDir: '/x',
+    cli: () => ({ command: 'x', args: [], env: {} }),
+    boot: () => ({ command: 'x', args: [], env: {} }),
+  },
+  device: '/x/var/device-a64-iphone-17-pro',
+  deviceName: 'iPhone 17 Pro',
+};
 const discover = async () => TARGET;
 
 test('on Linux with no endpoint, the discovered phone is the one to start a server for', async () => {
-  assert.deepEqual(await findAutoTarget(undefined, {}, 'linux', discover), TARGET);
+  assert.deepEqual(await findAutoTarget(undefined, {}, undefined, 'linux', discover), TARGET);
 });
 
 test('an endpoint option or X86SIM_WEBDRIVER_ENDPOINT means the server is elsewhere', async () => {
-  assert.equal(await findAutoTarget('http://box:4723', {}, 'linux', discover), undefined);
+  assert.equal(await findAutoTarget('http://box:4723', {}, undefined, 'linux', discover), undefined);
   assert.equal(
-    await findAutoTarget(undefined, { X86SIM_WEBDRIVER_ENDPOINT: 'http://box:4723' }, 'linux', discover),
+    await findAutoTarget(undefined, { X86SIM_WEBDRIVER_ENDPOINT: 'http://box:4723' }, undefined, 'linux', discover),
     undefined,
   );
 });
 
 test('on macOS the server is always elsewhere', async () => {
-  assert.equal(await findAutoTarget(undefined, {}, 'darwin', discover), undefined);
+  assert.equal(await findAutoTarget(undefined, {}, undefined, 'darwin', discover), undefined);
 });
 
-test('a Linux machine without x86Sim leaves the address alone instead of failing', async () => {
+test('a Linux machine where x86Sim is not set up leaves the address alone', async () => {
   const missing = async () => {
-    throw new Error('No x86Sim AppImage found.');
+    throw new NotSetUpError('x86Sim is not set up.');
   };
-  assert.equal(await findAutoTarget(undefined, {}, 'linux', missing), undefined);
+  assert.equal(await findAutoTarget(undefined, {}, undefined, 'linux', missing), undefined);
 });
 
-test('X86SIM_APPIMAGE is passed on to discovery', async () => {
+test('any other discovery error, such as two phones to choose from, is reported', async () => {
+  const ambiguous = async () => {
+    throw new Error('There is more than one phone.');
+  };
+  await assert.rejects(findAutoTarget(undefined, {}, undefined, 'linux', ambiguous), /more than one phone/);
+});
+
+test('X86SIM_APPIMAGE and the chosen phone are passed on to discovery', async () => {
   let seen: unknown;
-  await findAutoTarget(undefined, { X86SIM_APPIMAGE: '/env/x86sim.AppImage' }, 'linux', async (flags) => {
+  await findAutoTarget(undefined, { X86SIM_APPIMAGE: '/env/x86sim.AppImage' }, 'iPhone SE', 'linux', async (flags) => {
     seen = flags;
     return TARGET;
   });
-  assert.deepEqual(seen, { appimage: '/env/x86sim.AppImage' });
+  assert.deepEqual(seen, { appimage: '/env/x86sim.AppImage', device: 'iPhone SE' });
 });
 
 function counting() {

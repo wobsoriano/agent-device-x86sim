@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vite-plus/test';
+import { chosenPhone } from '../src/connection.ts';
 import x86sim from '../src/index.ts';
 import { X86SIM_PROFILE_FIELDS } from '../src/profile-fields.ts';
 
@@ -78,4 +79,10 @@ test('connect names the fix when the server is not reachable', async () => {
       return true;
     },
   );
+});
+
+test('--device names a phone only when the user set it', () => {
+  assert.equal(chosenPhone('iPhone SE'), 'iPhone SE');
+  assert.equal(chosenPhone('x86Sim iPhone'), undefined);
+  assert.equal(chosenPhone(undefined), undefined);
 });

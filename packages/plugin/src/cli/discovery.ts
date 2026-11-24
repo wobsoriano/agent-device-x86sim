@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { appImageInstall, dataDirInstall, newestVersion, x86simCacheDir, x86simDataDir } from './install.ts';
+import type { X86Sim } from './install.ts';
 
 /** The names in a folder, or none when it does not exist. */
 export type ListDir = (dir: string) => Promise<readonly string[]>;
@@ -9,90 +11,122 @@ export type Environment = {
   home: string;
   cwd: string;
   listDir: ListDir;
+  /** The text of a file, or `undefined` when there is none. */
+  readText: (file: string) => Promise<string | undefined>;
+  /** Where a symbolic link points, or `undefined` when it is not one. */
+  readLink: (file: string) => Promise<string | undefined>;
   isExecutable: (file: string) => Promise<boolean>;
+  /** Whether the phone in this folder runs. */
+  isRunning: (device: string) => Promise<boolean>;
 };
 
-export const RELEASES_URL = 'https://github.com/x86sim/x86sim/releases/latest';
-const APPIMAGE_NAME = /^x86sim-(\d+(?:\.\d+)*)-x86_64\.AppImage$/;
+/** A phone x86Sim has created. */
+export type Phone = {
+  /** The folder in `var/`, such as `device-a64-iphone-17-pro`. */
+  folder: string;
+  path: string;
+  /** The name the launcher shows, such as `iPhone 17 Pro`. */
+  name: string;
+};
+
+export const QUICK_START_URL = 'https://github.com/x86sim/x86sim#quick-start';
 const DEVICE_PREFIX = 'device-a64-';
 
-/** A version compared part by part, so 0.10.0 is newer than 0.9.1. */
-function compareVersions(a: string, b: string): number {
-  const left = a.split('.').map(Number);
-  const right = b.split('.').map(Number);
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-}
+/** x86Sim has not been set up on this machine. Callers that can run without it catch this one. */
+export class NotSetUpError extends Error {}
 
-export const appImageFolders = ({ home, cwd }: Pick<Environment, 'home' | 'cwd'>): string[] => [
-  path.join(home, 'x86sim'),
-  path.join(home, 'Applications'),
-  path.join(home, 'Downloads'),
-  cwd,
-];
-
-/** The newest `x86sim-<version>-x86_64.AppImage` among the folders. The earlier folder wins a tie. */
-export async function newestAppImage(folders: readonly string[], listDir: ListDir): Promise<string | undefined> {
-  let best: { file: string; version: string } | undefined;
-  for (const folder of folders) {
-    for (const name of await listDir(folder)) {
-      const version = APPIMAGE_NAME.exec(name)?.[1];
-      if (version && (!best || compareVersions(version, best.version) > 0)) {
-        best = { file: path.join(folder, name), version };
-      }
+/**
+ * x86Sim as `--appimage` or `$X86SIM_APPIMAGE` names it, else the newest copy in the data
+ * folder. Running an AppImage copies its payload there, whatever folder the AppImage is in.
+ */
+export async function findX86Sim(flag: string | undefined, environment: Environment): Promise<X86Sim> {
+  const { env, home, cwd } = environment;
+  const dataDir = x86simDataDir(env, home);
+  const given = flag ?? env.X86SIM_APPIMAGE;
+  if (given) {
+    const file = path.resolve(cwd, given);
+    if (!(await environment.isExecutable(file))) {
+      throw new Error(`The x86Sim AppImage ${file} is missing or not executable. Run: chmod +x ${file}`);
     }
+    return appImageInstall(file, dataDir);
   }
-  return best?.file;
+  const appDir = path.join(dataDir, 'app');
+  const complete: string[] = [];
+  for (const version of await environment.listDir(appDir)) {
+    if ((await environment.listDir(path.join(appDir, version))).includes('.complete')) complete.push(version);
+  }
+  const version = newestVersion(complete);
+  if (!version) throw new NotSetUpError(`x86Sim is not set up. Follow ${QUICK_START_URL}`);
+  const mode = env.X86SIM_DARLING_MODE;
+  const link = await environment.readLink(path.join(dataDir, 'darling-prefix'));
+  return dataDirInstall({
+    dataDir,
+    cacheDir: x86simCacheDir(env, home),
+    version,
+    darlingId: (await environment.readText(path.join(appDir, version, 'DARLING_ID')))?.trim() ?? '',
+    darlingMode: mode === 'system' || mode === 'userns' ? mode : link?.includes('darling-userns') ? 'userns' : 'system',
+    path: env.PATH ?? '',
+  });
 }
 
-/** The AppImage from `--appimage`, else `$X86SIM_APPIMAGE`, else the newest one in the usual folders. */
-export async function findAppImage(flag: string | undefined, environment: Environment): Promise<string> {
-  const given = flag ?? environment.env.X86SIM_APPIMAGE;
-  const folders = appImageFolders(environment);
-  const file = given ? path.resolve(environment.cwd, given) : await newestAppImage(folders, environment.listDir);
-  if (!file) {
-    throw new Error(
-      `No x86Sim AppImage found. Looked for x86sim-<version>-x86_64.AppImage in ${folders.join(', ')}.\n` +
-        `Download one from ${RELEASES_URL}, or pass --appimage PATH or set X86SIM_APPIMAGE.`,
-    );
-  }
-  if (!(await environment.isExecutable(file))) {
-    throw new Error(`The x86Sim AppImage ${file} is missing or not executable. Run: chmod +x ${file}`);
-  }
-  return file;
+async function listPhones(dataDir: string, environment: Environment): Promise<Phone[]> {
+  const varDir = path.join(dataDir, 'var');
+  const folders = (await environment.listDir(varDir)).filter((name) => name.startsWith(DEVICE_PREFIX)).sort();
+  return await Promise.all(
+    folders.map(async (folder) => ({
+      folder,
+      path: path.join(varDir, folder),
+      name: (await environment.readText(path.join(varDir, folder, 'name')))?.trim() || folder,
+    })),
+  );
 }
 
-/** Where x86Sim keeps its data, which holds the phones in `var/`. */
-export const x86simDataDir = ({ env, home }: Pick<Environment, 'env' | 'home'>): string =>
-  path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'x86sim');
+const quoted = (phones: readonly Phone[]) => phones.map((phone) => `"${phone.name}"`).join(', ');
 
-/** The phone's folder from `--device` (a name or a folder), else the only phone x86Sim has created. */
-export async function findDevice(
-  flag: string | undefined,
-  appImage: string,
-  environment: Environment,
-): Promise<string> {
-  const varDir = path.join(x86simDataDir(environment), 'var');
-  if (flag) {
-    const folder = flag.includes('/') ? path.resolve(environment.cwd, flag) : path.join(varDir, flag);
+const pick = (phone: Phone) => `agent-device connect x86sim --device "${phone.name}"`;
+
+/**
+ * The phone to use. `--device` names it, by the name the launcher shows or by its folder, or is
+ * the folder's path. Without it, the phone that runs wins, else the only phone.
+ */
+export async function findPhone(flag: string | undefined, dataDir: string, environment: Environment): Promise<Phone> {
+  const phones = await listPhones(dataDir, environment);
+  if (flag?.includes('/')) {
+    const folder = path.resolve(environment.cwd, flag);
     if (!(await environment.listDir(folder)).includes('sim.env')) {
+      throw new Error(`${folder} is not a phone folder, because it has no sim.env.`);
+    }
+    return { folder: path.basename(folder), path: folder, name: path.basename(folder) };
+  }
+  if (flag) {
+    const lower = flag.toLowerCase();
+    const matches = phones.filter((phone) => phone.folder === flag || phone.name.toLowerCase() === lower);
+    const [only] = matches;
+    if (only && matches.length === 1) return only;
+    if (only) {
       throw new Error(
-        `${folder} is not a phone folder, because it has no sim.env. List the phones with: ${appImage} x86sim device list`,
+        `More than one phone is named "${flag}". Use a folder name: ${matches.map((p) => p.folder).join(', ')}.`,
       );
     }
-    return folder;
-  }
-  const phones = (await environment.listDir(varDir)).filter((name) => name.startsWith(DEVICE_PREFIX)).sort();
-  if (phones.length === 0) {
     throw new Error(
-      `No phone found in ${varDir}. Create one with: ${appImage} x86sim device create --model "iPhone 17 Pro"`,
+      phones.length === 0
+        ? `No phone found in ${path.join(dataDir, 'var')}. Create one on the Setup page of the x86Sim launcher. ${QUICK_START_URL}`
+        : `No phone is named "${flag}". The phones are ${quoted(phones)}.`,
     );
   }
-  if (phones.length > 1) {
-    throw new Error(`More than one phone in ${varDir}: ${phones.join(', ')}. Pick one with --device NAME.`);
+  const [first] = phones;
+  if (!first) {
+    throw new Error(
+      `No phone found in ${path.join(dataDir, 'var')}. Create one on the Setup page of the x86Sim launcher. ${QUICK_START_URL}`,
+    );
   }
-  return path.join(varDir, phones[0] as string);
+  const running: Phone[] = [];
+  for (const phone of phones) if (await environment.isRunning(phone.path)) running.push(phone);
+  const [firstRunning] = running;
+  if (firstRunning && running.length === 1) return firstRunning;
+  if (phones.length === 1) return first;
+  throw new Error(
+    `${running.length > 1 ? 'More than one phone runs' : 'There is more than one phone and none runs'}. ` +
+      `The phones are ${quoted(running.length > 1 ? running : phones)}. Pick one with ${pick(running[0] ?? first)}.`,
+  );
 }

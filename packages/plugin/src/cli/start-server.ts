@@ -49,7 +49,7 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
   const hook = await packagedHookPath();
   await preparePhone(
     createPhoneControl({
-      appImage: options.target.appImage,
+      x86sim: options.target.x86sim,
       device: options.target.device,
       hook,
       verbose: options.verbose,
@@ -58,7 +58,7 @@ export async function startServer(options: StartOptions): Promise<RunningServer>
     options.log,
   );
   const server = createServer({
-    backend: new X86SimBackend({ appImage: options.target.appImage, device: options.target.device }),
+    backend: new X86SimBackend({ cli: (args) => options.target.x86sim.cli(args), device: options.target.device }),
     log: options.verbose ? (line) => process.stderr.write(`${line}\n`) : () => {},
   });
   await new Promise<void>((resolve, reject) => {

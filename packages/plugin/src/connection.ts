@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { AgentDevicePlugin, ProviderPluginHost } from 'agent-device/plugins';
 import { findAutoTarget } from './auto-start.ts';
 import { X86SIM_PROFILE_FIELDS } from './profile-fields.ts';
@@ -11,6 +10,10 @@ export const DEFAULT_DEVICE = 'x86Sim iPhone';
 export const DEFAULT_ENDPOINT = 'http://127.0.0.1:4723';
 
 const STATUS_TIMEOUT_MS = 5_000;
+
+/** `--device` names an x86Sim phone only when the user set it, because agent-device fills in a default name. */
+export const chosenPhone = (device: unknown): string | undefined =>
+  typeof device === 'string' && device !== DEFAULT_DEVICE ? device : undefined;
 
 /** Options win over the environment, and the environment wins over the local default. */
 export function resolveEndpoint(endpoint: string | undefined, env: ProviderPluginHost['env']): string {
@@ -50,12 +53,12 @@ export function createConnection(options: { endpoint?: string | undefined }): Co
       };
     },
     verify: async ({ flags, env, host }) => {
-      const target = await findAutoTarget(options.endpoint, env);
+      const target = await findAutoTarget(options.endpoint, env, chosenPhone(flags.device));
       if (target) {
         return {
           provider: PROVIDER,
           service: SERVICE,
-          verificationMessage: `${SERVICE} is installed here (${target.appImage}, phone ${path.basename(target.device)}). The server and the phone start when the first session opens, which can take 1.5 to 6 minutes.`,
+          verificationMessage: `${target.x86sim.label} is installed here, and the phone is ${target.deviceName}. The server and the phone start when the first session opens, which can take 1.5 to 6 minutes.`,
           device: { status: 'verified', name: flags.device ?? DEFAULT_DEVICE, platform: 'ios' },
           app: { status: 'deferred' },
         };

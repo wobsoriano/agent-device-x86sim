@@ -54,13 +54,13 @@ test('a stopped phone gets its preferences, then boots with the hook', async () 
 test('a running phone without the hook is stopped first, then booted', async () => {
   const { performed, lines } = await run({ running: true, hooked: false, axPrefs: true });
   assert.deepEqual(performed, ['stop', ...BOOT]);
-  assert.match(lines.join('\n'), /running without the hook/);
+  assert.match(lines.join('\n'), /Restarting the phone to load the accessibility hook/);
 });
 
 test('a running phone with the hook but without accessibility is restarted', async () => {
   const { performed, lines } = await run({ running: true, hooked: true, axPrefs: false });
   assert.deepEqual(performed, ['stop', ...BOOT]);
-  assert.match(lines.join('\n'), /running without accessibility/);
+  assert.match(lines.join('\n'), /Restarting the phone to turn on accessibility/);
 });
 
 test('preparing a phone twice does the work once', async () => {
