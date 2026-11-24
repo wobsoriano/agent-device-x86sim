@@ -4,8 +4,8 @@ This repository is a [Vite+](https://viteplus.dev) monorepo on pnpm workspaces. 
 
 ## Layout
 
-- `packages/plugin` is the npm package `agent-device-x86sim`. It is an agent-device provider plugin (`apiVersion` 2). `vp pack` builds it to `packages/plugin/dist`.
-- `packages/server` is `x86sim-webdriver`. It runs from source with Node type stripping. A `Backend` owns the simulator: `backends/fake.ts` for tests and `backends/x86sim.ts` for a real phone.
+- `packages/plugin` is the npm package `agent-device-x86sim`, the only package that is published. It is an agent-device provider plugin (`apiVersion` 2) and the `agent-device-x86sim` command. `vp pack` builds it to `packages/plugin/dist` and copies the prebuilt hook to `packages/plugin/ax-hook`. `src/cli/` holds the command: argument parsing, discovery of the AppImage and the phone, the phone preparation table, and the server start-up that `serve` and the plugin share. `src/auto-start.ts` starts that server inside the agent-device daemon.
+- `packages/server` is `x86sim-webdriver`. It stays private and the plugin bundles it. It also runs from source with Node type stripping, for development. A `Backend` owns the simulator: `backends/fake.ts` for tests and `backends/x86sim.ts` for a real phone.
 - `packages/ax-hook` is the C accessibility hook. `build.sh` builds it on a Mac with Xcode. It is not a pnpm workspace package.
 - `scripts/e2e.ts` runs agent-device in-process against the fake backend. `scripts/e2e-live.ts` runs it against a real phone.
 
@@ -32,11 +32,17 @@ The server logs one line per request to stderr. The fake backend records input a
 
 ## Live run against a real phone
 
-Set up the Linux machine as the README describes. Then, on the machine that runs agent-device:
+Set up the Linux machine as the README describes. Then start the server from the built package on the Linux machine, or let the plugin start it.
+
+```sh
+vp run agent-device-x86sim#build
+node packages/plugin/dist/cli.js serve
+```
+
+On the machine that runs agent-device:
 
 ```sh
 ssh -N -L 4723:localhost:4723 linux-box &
-vp run agent-device-x86sim#build
 node scripts/e2e-live.ts ./live-out
 ```
 
@@ -58,23 +64,26 @@ Every phone process that starts UIKit listens on `/run/user/<uid>/x86sim-ax-<SIM
 
 The server asks SpringBoard first, then only the app in front. A suspended app accepts the connection and never answers.
 
-## Install the plugin through the real CLI before publishing
+## Install the package through the real CLI before publishing
 
-`agent-device plugins add` installs only from an npm registry. To test that path, publish to a local [Verdaccio](https://verdaccio.org) registry.
+`agent-device plugins add` and `npx` install only from an npm registry. To test those paths, publish to a local [Verdaccio](https://verdaccio.org) registry. Never publish a local build to the public registry.
 
 1. Start Verdaccio with a config that allows anonymous publishing of `agent-device-x86sim` and proxies everything else to npmjs. It listens on `127.0.0.1:4873`.
-2. Build the plugin with `vp run agent-device-x86sim#build`.
-3. Copy `packages/plugin/package.json` and `packages/plugin/dist` to a temporary folder. In that copy, remove `private`, `scripts`, and `devDependencies`, and set a version such as `0.0.1-local.1`.
-4. Publish the copy.
+2. Build the package with `vp run agent-device-x86sim#build`. The tarball must hold `dist` and `ax-hook`. Check it with `npm pack --dry-run` in `packages/plugin`.
+3. Give the build a local version, publish it, and restore `package.json`.
 
    ```sh
-   npm publish --registry http://127.0.0.1:4873 --//127.0.0.1:4873/:_authToken=anon
+   cd packages/plugin
+   npm pkg set version=0.1.0-local.1
+   npm publish --registry http://127.0.0.1:4873 --//127.0.0.1:4873/:_authToken=anon --tag local
+   git checkout package.json
    ```
 
-5. Install it into agent-device.
+4. Install the plugin into agent-device.
 
    ```sh
-   npm_config_registry=http://127.0.0.1:4873 agent-device plugins add agent-device-x86sim@0.0.1-local.1
+   npm_config_registry=http://127.0.0.1:4873 agent-device plugins add agent-device-x86sim@0.1.0-local.1
    ```
 
-6. Stop the agent-device daemon so that it loads the new plugin. Then run `agent-device connect x86sim`.
+5. Stop the agent-device daemon so that it loads the new plugin. Then run `agent-device connect x86sim`.
+6. To test `serve` on a Linux machine, expose the registry there with `boat forward <sandbox> --reverse --local 4873` or an SSH reverse tunnel, then run `npx --registry http://127.0.0.1:4873 agent-device-x86sim@0.1.0-local.1 serve`.
