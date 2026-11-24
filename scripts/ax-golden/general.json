@@ -50,7 +50,24 @@
     "App > Toolbar #Toolbar"
   ],
   "allow": {
-    "missing": [],
+    "missing": [
+      {
+        "line": "App > CollectionView > Cell",
+        "reason": "The Mac simulator has a pointing device, so Settings lists Trackpad. The phone under x86Sim has none and the screen shows no Trackpad row."
+      },
+      {
+        "line": "App > CollectionView > Cell > Button \"Trackpad\" #com.apple.settings.general.pointerDevice",
+        "reason": "The Mac simulator has a pointing device, so Settings lists Trackpad. The phone under x86Sim has none and the screen shows no Trackpad row."
+      },
+      {
+        "line": "App > CollectionView > Cell > Button > StaticText \"Trackpad\"",
+        "reason": "The Mac simulator has a pointing device, so Settings lists Trackpad. The phone under x86Sim has none and the screen shows no Trackpad row."
+      },
+      {
+        "line": "App > CollectionView > Cell > Button > Image #chevron.forward",
+        "reason": "The Mac simulator has a pointing device, so Settings lists Trackpad. The phone under x86Sim has none and the screen shows no Trackpad row."
+      }
+    ],
     "extra": []
   }
 }

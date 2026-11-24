@@ -75,7 +75,7 @@ Capture the fixtures again on a Mac, from a booted iOS simulator. This keeps the
 node scripts/ax-golden.ts capture --udid <simulator udid>
 ```
 
-A fixture's `allow.missing` and `allow.extra` list lines that may differ, each with a `reason`, such as a label that changed between iOS versions. Add `--screen <name>` to run one screen.
+A fixture's `allow.missing` and `allow.extra` list lines that may differ, each with a `reason`, such as a label that changed between iOS versions. Each entry covers one occurrence of its line, so a row that is missing needs one entry for each of its lines. Add `--screen <name>` to run one screen.
 
 The script does not compare `snapshot -i`. agent-device prunes `-i` differently for XCTest and for a WebDriver page source, so `-i` can differ when the trees are the same.
 

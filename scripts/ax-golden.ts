@@ -139,12 +139,24 @@ export function diffLines(expected: readonly string[], actual: readonly string[]
   return ops;
 }
 
+/** How many times each line may differ. One allowance covers one occurrence of its line. */
+const allowances = (list: readonly Allowance[]): Map<string, number> => {
+  const counts = new Map<string, number>();
+  for (const { line } of list) counts.set(line, (counts.get(line) ?? 0) + 1);
+  return counts;
+};
+
 /** The diff of one screen with allowed lines dropped, or an empty list when it matches. */
 export function compare(fixture: Fixture, actual: readonly string[]) {
-  const missingOk = new Set(fixture.allow.missing.map((a) => a.line));
-  const extraOk = new Set(fixture.allow.extra.map((a) => a.line));
+  const missingOk = allowances(fixture.allow.missing);
+  const extraOk = allowances(fixture.allow.extra);
+  const spend = (budget: Map<string, number>, line: string): boolean => {
+    const left = budget.get(line) ?? 0;
+    if (left > 0) budget.set(line, left - 1);
+    return left > 0;
+  };
   const ops = diffLines(fixture.lines, actual).filter(
-    ({ op, line }) => !(op === '-' && missingOk.has(line)) && !(op === '+' && extraOk.has(line)),
+    ({ op, line }) => !(op === '-' && spend(missingOk, line)) && !(op === '+' && spend(extraOk, line)),
   );
   return ops.some(({ op }) => op !== ' ') ? ops : [];
 }
