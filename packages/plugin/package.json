@@ -1,10 +1,13 @@
 {
   "name": "agent-device-x86sim",
-  "version": "0.0.0",
-  "private": true,
-  "description": "agent-device provider plugin for x86Sim, driving an iOS simulator through the x86sim-webdriver server.",
+  "version": "0.1.0",
+  "description": "Run an iOS simulator on Linux through x86Sim and drive it with agent-device. One package: the agent-device plugin and the `agent-device-x86sim` command.",
+  "bin": {
+    "agent-device-x86sim": "./dist/cli.js"
+  },
   "files": [
-    "dist"
+    "dist",
+    "ax-hook/libx86sim-ax.dylib"
   ],
   "type": "module",
   "exports": {
@@ -27,5 +30,8 @@
   },
   "peerDependencies": {
     "agent-device": ">=0.21.35"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

@@ -5,3 +5,4 @@ dist/
 .state*/
 live-out/
 packages/ax-hook/build/
+packages/plugin/ax-hook/

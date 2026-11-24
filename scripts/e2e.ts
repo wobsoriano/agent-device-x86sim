@@ -6,7 +6,8 @@
  * Run it with `vp run e2e`, which builds the plugin first.
  */
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -59,6 +60,15 @@ const scope = {
 let leaseId: string | undefined;
 
 try {
+  step('the built CLI prints the packaged hook path');
+  const hookPath = spawnSync(process.execPath, [path.join(root, 'packages/plugin/dist/cli.js'), 'hook-path'], {
+    encoding: 'utf8',
+  });
+  assert.equal(hookPath.status, 0, hookPath.stderr);
+  const hook = hookPath.stdout.trim();
+  assert.ok(path.isAbsolute(hook) && existsSync(hook), `hook-path printed ${hook}`);
+  console.log(hook);
+
   step('allocate a lease on provider x86sim');
   const lease = await client.leases.allocate({ ...scope, platform: 'ios', device: 'x86Sim iPhone' });
   leaseId = lease.leaseId;
