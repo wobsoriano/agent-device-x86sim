@@ -63,7 +63,9 @@ export class X86SimBackend implements Backend {
       socket.setNoDelay(true);
       // simhid sends nothing back, but an unread stream would still fill up.
       socket.on('data', () => {});
-      const forget = () => void (this.#socket = undefined);
+      const forget = () => {
+        this.#socket = undefined;
+      };
       socket.on('close', forget);
       socket.on('error', forget);
       await new Promise<void>((resolve, reject) => {
@@ -72,7 +74,9 @@ export class X86SimBackend implements Backend {
       });
       return socket;
     })();
-    this.#socket.catch(() => void (this.#socket = undefined));
+    this.#socket.catch(() => {
+      this.#socket = undefined;
+    });
     return this.#socket;
   }
 
@@ -81,7 +85,10 @@ export class X86SimBackend implements Backend {
       const socket = await this.#connect();
       for (const step of steps) {
         if (step.kind === 'wait') await sleep(step.ms);
-        else await new Promise<void>((resolve, reject) => socket.write(`${step.line}\n`, (error) => (error ? reject(error) : resolve())));
+        else
+          await new Promise<void>((resolve, reject) =>
+            socket.write(`${step.line}\n`, (error) => (error ? reject(error) : resolve())),
+          );
       }
     });
     this.#input = run.catch(() => undefined);

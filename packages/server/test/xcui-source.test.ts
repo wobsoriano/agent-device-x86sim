@@ -30,7 +30,10 @@ test('wraps the tree in AppiumAUT with one tag per element type', () => {
   const lines = source.split('\n');
   assert.equal(lines[0], '<?xml version="1.0" encoding="UTF-8"?>');
   assert.equal(lines[1], '<AppiumAUT>');
-  assert.match(lines[2] ?? '', /^ {2}<XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Example" enabled="true" visible="true" x="0" y="0" width="390" height="844">$/);
+  assert.match(
+    lines[2] ?? '',
+    /^ {2}<XCUIElementTypeApplication type="XCUIElementTypeApplication" name="Example" enabled="true" visible="true" x="0" y="0" width="390" height="844">$/,
+  );
   assert.match(
     lines[3] ?? '',
     /^ {4}<XCUIElementTypeButton type="XCUIElementTypeButton" name="Continue" label="Continue" enabled="true" visible="true" x="24" y="700" width="160" height="48" \/>$/,
@@ -55,8 +58,6 @@ test('reports disabled and hidden nodes', () => {
 });
 
 test('escapes attribute values', () => {
-  const source = toXcuiSource(
-    node({ type: 'XCUIElementTypeStaticText', label: `Tom & "Jerry" <3 it's\nhere` }),
-  );
+  const source = toXcuiSource(node({ type: 'XCUIElementTypeStaticText', label: `Tom & "Jerry" <3 it's\nhere` }));
   assert.match(source, /label="Tom &amp; &quot;Jerry&quot; &lt;3 it&apos;s&#10;here"/);
 });

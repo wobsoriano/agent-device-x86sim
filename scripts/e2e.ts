@@ -15,7 +15,11 @@ import path from 'node:path';
 import { startAgentDevice } from 'agent-device';
 import x86sim from 'agent-device-x86sim/agent-device';
 
-type FakeCall = { seq: number; call: string; args: { events?: Array<{ kind: string; at?: { x: number; y: number } }> } };
+type FakeCall = {
+  seq: number;
+  call: string;
+  args: { events?: Array<{ kind: string; at?: { x: number; y: number } }> };
+};
 
 const root = path.resolve(import.meta.dirname, '..');
 const requestLog: string[] = [];
@@ -68,7 +72,9 @@ try {
   step('interactive snapshot');
   const snapshot = await client.capture.snapshot({ ...leased, interactiveOnly: true });
   for (const node of snapshot.nodes) {
-    console.log(`  ${node.ref ?? '-'} ${node.type} label=${JSON.stringify(node.label)} rect=${JSON.stringify(node.rect)}`);
+    console.log(
+      `  ${node.ref ?? '-'} ${node.type} label=${JSON.stringify(node.label)} rect=${JSON.stringify(node.rect)}`,
+    );
   }
   const button = snapshot.nodes.find((node) => node.label === 'Continue');
   assert.ok(button, 'snapshot lists the Continue button');
@@ -108,7 +114,10 @@ try {
     ['type', () => client.interactions.type({ ...leased, text: 'hi' })],
     ['fill (marked unsupported)', () => client.interactions.fill({ ...leased, ref: '@e3', text: 'a@b.c' })],
     ['back (marked unsupported)', () => client.command.back({ ...leased })],
-    ['orientation (marked unsupported)', () => client.command.orientation({ ...leased, orientation: 'landscape-left' })],
+    [
+      'orientation (marked unsupported)',
+      () => client.command.orientation({ ...leased, orientation: 'landscape-left' }),
+    ],
   ];
   for (const [name, run] of probes) {
     try {
@@ -124,7 +133,9 @@ try {
   for (const call of afterProbes.calls.filter((entry) => entry.call !== 'accessibilityTree')) {
     const kinds = (call.args.events ?? []).map((event) => event.kind);
     const counts = kinds.reduce<Record<string, number>>((all, kind) => ({ ...all, [kind]: (all[kind] ?? 0) + 1 }), {});
-    console.log(`  backend #${call.seq} ${call.call} ${kinds.length > 0 ? JSON.stringify(counts) : JSON.stringify(call.args)}`);
+    console.log(
+      `  backend #${call.seq} ${call.call} ${kinds.length > 0 ? JSON.stringify(counts) : JSON.stringify(call.args)}`,
+    );
   }
 
   step('close the session');
@@ -144,11 +155,14 @@ try {
 
   console.log('\n== server request log (stderr)');
   for (const line of requestLog) console.log(`  ${line}`);
-  console.log('\n== distinct routes agent-device called (this script\'s own /__fake reads left out)');
+  console.log("\n== distinct routes agent-device called (this script's own /__fake reads left out)");
   const routes = new Set(
-    requestLog.filter((line) => !line.includes(' /__fake/')).map((line) => /^(\S+) (\S+)/.exec(line)).flatMap((found) =>
-      found ? [`${found[1]} ${found[2]!.replace(/\/session\/[0-9a-f-]{36}/, '/session/:id')}`] : [],
-    ),
+    requestLog
+      .filter((line) => !line.includes(' /__fake/'))
+      .map((line) => /^(\S+) (\S+)/.exec(line))
+      .flatMap((found) =>
+        found ? [`${found[1]} ${found[2]!.replace(/\/session\/[0-9a-f-]{36}/, '/session/:id')}`] : [],
+      ),
   );
   for (const route of routes) console.log(`  ${route}`);
 }

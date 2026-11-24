@@ -73,7 +73,11 @@ test('a timed drag becomes evenly spaced moves that end exactly on the target', 
   assert.deepEqual(moves.at(-1), { kind: 'move', at: { x: 200, y: 200 } });
   assert.deepEqual(events.at(-1), { kind: 'up', at: { x: 200, y: 200 } });
   const ys = moves.map((event) => (event.kind === 'move' ? event.at.y : NaN));
-  assert.deepEqual([...ys].sort((a, b) => b - a), ys, 'y only decreases along an upward swipe');
+  assert.deepEqual(
+    [...ys].sort((a, b) => b - a),
+    ys,
+    'y only decreases along an upward swipe',
+  );
 });
 
 test('an instant move while pressed is a single move', () => {

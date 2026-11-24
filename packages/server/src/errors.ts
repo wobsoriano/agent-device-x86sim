@@ -19,8 +19,6 @@ export const invalidArgument = (message: string) => new WebDriverError('invalid 
 export const invalidSessionId = (id: string) =>
   new WebDriverError('invalid session id', 404, `No active session with id ${id}`);
 export const noSuchElement = (message: string) => new WebDriverError('no such element', 404, message);
-export const sessionNotCreated = (message: string) =>
-  new WebDriverError('session not created', 500, message);
-export const unsupportedOperation = (message: string) =>
-  new WebDriverError('unsupported operation', 500, message);
+export const sessionNotCreated = (message: string) => new WebDriverError('session not created', 500, message);
+export const unsupportedOperation = (message: string) => new WebDriverError('unsupported operation', 500, message);
 export const unknownError = (message: string) => new WebDriverError('unknown error', 500, message);

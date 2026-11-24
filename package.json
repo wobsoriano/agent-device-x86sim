@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "ready": "vp check && vp run -r test && vp run -r build"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "agent-device": "catalog:",

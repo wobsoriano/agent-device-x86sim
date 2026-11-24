@@ -54,10 +54,7 @@ function bodySummary(body: unknown): string {
 
 export function createServer(options: ServerOptions): Server {
   const sessions: SessionStore = { current: undefined };
-  const router = createRouter([
-    ...webDriverRoutes(options.backend, sessions),
-    ...(options.extraRoutes ?? []),
-  ]);
+  const router = createRouter([...webDriverRoutes(options.backend, sessions), ...(options.extraRoutes ?? [])]);
   const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
 
   return createHttpServer(async (request, response) => {

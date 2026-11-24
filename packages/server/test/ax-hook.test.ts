@@ -5,7 +5,13 @@ import { createServer } from 'node:net';
 import type { Server } from 'node:net';
 import path from 'node:path';
 import { test } from 'vite-plus/test';
-import { SPRINGBOARD_BUNDLE_ID, firstMatching, hookSocketNames, parseHookReply, readFrontTree } from '../src/backends/ax-hook.ts';
+import {
+  SPRINGBOARD_BUNDLE_ID,
+  firstMatching,
+  hookSocketNames,
+  parseHookReply,
+  readFrontTree,
+} from '../src/backends/ax-hook.ts';
 import { parseSimulatorUdid } from '../src/backends/simhid.ts';
 import type { AxNode } from '../src/types.ts';
 
@@ -32,7 +38,13 @@ const application = (...windowChildren: AxNode[]): AxNode => ({
 });
 
 /** A hook that listens like the real one: `tree\n` in, one JSON line out. */
-async function fakeHook(dir: string, udid: string, pid: number, behavior: 'answer' | 'hang', body: string): Promise<Server> {
+async function fakeHook(
+  dir: string,
+  udid: string,
+  pid: number,
+  behavior: 'answer' | 'hang',
+  body: string,
+): Promise<Server> {
   const server = createServer((socket) => {
     socket.on('data', () => {
       if (behavior === 'answer') socket.end(`${body}\n`);
@@ -50,7 +62,9 @@ const appBody = (pid: number, bundleId: string, label: string) =>
   JSON.stringify({ pid, bundleId, root: application(button(label)) });
 
 /** Runs `body` with a runtime directory and closes every fake hook afterwards. */
-async function withHooks(body: (dir: string, add: (pid: number, behavior: 'answer' | 'hang', json: string) => Promise<void>) => Promise<void>) {
+async function withHooks(
+  body: (dir: string, add: (pid: number, behavior: 'answer' | 'hang', json: string) => Promise<void>) => Promise<void>,
+) {
   // sockaddr_un holds about 100 bytes, which macOS's per-user temp directory alone nearly fills.
   const dir = await mkdtemp('/tmp/ax-hooks-');
   const servers: Server[] = [];
@@ -75,7 +89,7 @@ test('the home screen is SpringBoard, and a suspended app that never answers cos
   });
 });
 
-test('with an app in front the tree is that app\'s, whichever hooks also answer', async () => {
+test("with an app in front the tree is that app's, whichever hooks also answer", async () => {
   await withHooks(async (dir, add) => {
     await add(80, 'answer', springboardBody({ pid: 1817, bundleId: 'com.apple.Preferences' }));
     await add(1817, 'answer', appBody(1817, 'com.apple.Preferences', 'General'));
@@ -121,7 +135,7 @@ test('firstMatching settles on the first match, or on nothing when none matches'
   assert.equal(await firstMatching([], () => true), undefined);
 });
 
-test('only this phone\'s hook sockets are picked from a runtime directory', () => {
+test("only this phone's hook sockets are picked from a runtime directory", () => {
   const udid = 'CED9FD5F-23EB-57BD-8736-5DFD6CC9EDDF';
   const files = [
     `x86sim-ax-${udid}-80.sock`,
@@ -134,7 +148,10 @@ test('only this phone\'s hook sockets are picked from a runtime directory', () =
 });
 
 test('sim.env gives the phone identity that names the sockets', () => {
-  assert.equal(parseSimulatorUdid('A=1\nSIMULATOR_UDID=CED9FD5F-23EB-57BD-8736-5DFD6CC9EDDF\nB=2\n'), 'CED9FD5F-23EB-57BD-8736-5DFD6CC9EDDF');
+  assert.equal(
+    parseSimulatorUdid('A=1\nSIMULATOR_UDID=CED9FD5F-23EB-57BD-8736-5DFD6CC9EDDF\nB=2\n'),
+    'CED9FD5F-23EB-57BD-8736-5DFD6CC9EDDF',
+  );
   assert.throws(() => parseSimulatorUdid('SIMULATOR_DEVICE_NAME=iPhone\n'), /SIMULATOR_UDID/);
 });
 
@@ -152,7 +169,7 @@ test('a well-formed reply parses to the AxNode shape', () => {
   assert.equal(parsed.root.children[0]?.children[0]?.label, 'General');
 });
 
-test('SpringBoard\'s front app parses, and null means the home screen', () => {
+test("SpringBoard's front app parses, and null means the home screen", () => {
   assert.deepEqual(parseHookReply(wire({ front: { pid: 7, bundleId: 'com.apple.Preferences', extra: 1 } })).front, {
     pid: 7,
     bundleId: 'com.apple.Preferences',
@@ -164,7 +181,15 @@ test('extra hook fields are dropped and empty strings survive', () => {
   const node = faulty({ label: '', name: '', traits: 1, class: 'UIButton' });
   const parsed = parseHookReply(wire({ root: application(node) }));
   const leaf = parsed.root.children[0]?.children[0];
-  assert.deepEqual(Object.keys(leaf ?? {}).sort(), ['children', 'enabled', 'frame', 'label', 'name', 'type', 'visible']);
+  assert.deepEqual(Object.keys(leaf ?? {}).sort(), [
+    'children',
+    'enabled',
+    'frame',
+    'label',
+    'name',
+    'type',
+    'visible',
+  ]);
 });
 
 test('a malformed reply is rejected with the path of the bad field', () => {
@@ -177,7 +202,11 @@ test('a malformed reply is rejected with the path of the bad field', () => {
     ['a front without a pid', wire({ front: { bundleId: 'x' } }), /front\.pid/],
     ['a root that is not the application', wire({ root: button('x') }), /root\.type/],
     ['a node without a type prefix', wire({ root: { ...application(), type: 'Button' } }), /root\.type/],
-    ['a frame with a missing field', wire({ root: application(faulty({ frame: { x: 0, y: 0, width: 1 } })) }), /frame\.height/],
+    [
+      'a frame with a missing field',
+      wire({ root: application(faulty({ frame: { x: 0, y: 0, width: 1 } })) }),
+      /frame\.height/,
+    ],
     ['a non-numeric frame field', wire({ root: application(faulty({ frame: { ...frame, x: '0' } })) }), /frame\.x/],
     ['children that are not an array', wire({ root: { ...application(), children: {} } }), /root\.children/],
     ['a label that is not a string', wire({ root: application(faulty({ label: 3 })) }), /label/],

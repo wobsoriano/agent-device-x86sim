@@ -28,9 +28,7 @@ function attributes(node: AxNode): string {
     ['width', String(node.frame.width)],
     ['height', String(node.frame.height)],
   ];
-  return pairs
-    .flatMap(([key, value]) => (value === undefined ? [] : [`${key}="${escapeAttribute(value)}"`]))
-    .join(' ');
+  return pairs.flatMap(([key, value]) => (value === undefined ? [] : [`${key}="${escapeAttribute(value)}"`])).join(' ');
 }
 
 function element(node: AxNode, depth: number): string {

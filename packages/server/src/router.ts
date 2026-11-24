@@ -6,9 +6,10 @@ export type RouteContext = {
   body: unknown;
 };
 
-/** A handler returns the WebDriver `value`, or a `Reply` when the answer is not W3C-wrapped. */
+/** The answer of a handler whose response is not W3C-wrapped. */
 export type Reply = { reply: { status: number; json: unknown } };
-export type Handler = (context: RouteContext) => Promise<unknown | Reply>;
+/** A handler resolves to the WebDriver `value`, or to a `Reply`. Only `isReply` tells them apart. */
+export type Handler = (context: RouteContext) => Promise<unknown>;
 
 export type Route = {
   method: string;

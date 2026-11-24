@@ -128,7 +128,13 @@ test('a hardware button is pressed, held and released', () => {
 
 test('sim.env gives the panel in pixels and the scale, so points are pixels over scale', () => {
   const geometry = parseSimEnv(
-    ['HOME=/x', 'SIMULATOR_MAINSCREEN_WIDTH=1206', 'SIMULATOR_MAINSCREEN_HEIGHT=2622', 'SIMULATOR_MAINSCREEN_SCALE=3.000000', ''].join('\n'),
+    [
+      'HOME=/x',
+      'SIMULATOR_MAINSCREEN_WIDTH=1206',
+      'SIMULATOR_MAINSCREEN_HEIGHT=2622',
+      'SIMULATOR_MAINSCREEN_SCALE=3.000000',
+      '',
+    ].join('\n'),
   );
   assert.deepEqual(geometry, { pixels: { width: 1206, height: 2622 }, scale: 3 });
   assert.deepEqual(pointSize(geometry), SCREEN);

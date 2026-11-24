@@ -60,7 +60,12 @@ async function snap(leased: Leased): Promise<Buffer> {
  * Saves the settled screen to `outDir/name`. With `before`, it first waits for the pixels to
  * differ from it and reports how long after `actionAt` that took.
  */
-async function settledShot(leased: Leased, name: string, before: Buffer | undefined, actionAt: number): Promise<Buffer> {
+async function settledShot(
+  leased: Leased,
+  name: string,
+  before: Buffer | undefined,
+  actionAt: number,
+): Promise<Buffer> {
   let latest = await snap(leased);
   if (before) {
     while (latest.equals(before) && performance.now() - actionAt < CHANGE_TIMEOUT_MS) latest = await snap(leased);
@@ -79,7 +84,12 @@ async function settledShot(leased: Leased, name: string, before: Buffer | undefi
 }
 
 /** What `snapshot -i` returns for one element, as far as this script reads it. */
-type Listed = { ref?: string; type: string; label?: string; rect?: { x: number; y: number; width: number; height: number } };
+type Listed = {
+  ref?: string;
+  type: string;
+  label?: string;
+  rect?: { x: number; y: number; width: number; height: number };
+};
 
 const LIST_TIMEOUT_MS = 90_000;
 
@@ -88,7 +98,11 @@ const LIST_TIMEOUT_MS = 90_000;
  * given, none labelled that. A launch or a navigation animates for seconds before the new
  * screen's elements exist, and the old screen answers until then. Prints the list it settled on.
  */
-async function snapshotWith(leased: Leased, label: string, absent?: string): Promise<{ nodes: Listed[]; node: Listed; ms: number }> {
+async function snapshotWith(
+  leased: Leased,
+  label: string,
+  absent?: string,
+): Promise<{ nodes: Listed[]; node: Listed; ms: number }> {
   const startedAt = performance.now();
   for (;;) {
     const taken = performance.now();
@@ -98,14 +112,19 @@ async function snapshotWith(leased: Leased, label: string, absent?: string): Pro
     const node = nodes.find((candidate) => candidate.label === label && candidate.ref);
     if (node && !(absent && nodes.some((candidate) => candidate.label === absent))) {
       timings.push([`snapshot -i listing "${label}"`, ms]);
-      console.log(`  snapshot -i: ${nodes.length} elements in ${ms} ms, ${Math.round(performance.now() - startedAt)} ms after asking`);
+      console.log(
+        `  snapshot -i: ${nodes.length} elements in ${ms} ms, ${Math.round(performance.now() - startedAt)} ms after asking`,
+      );
       for (const listed of nodes) {
         const rect = listed.rect ? `${listed.rect.x},${listed.rect.y} ${listed.rect.width}x${listed.rect.height}` : '-';
         console.log(`    @${listed.ref ?? '-'} ${listed.type} ${JSON.stringify(listed.label ?? '')} [${rect}]`);
       }
       return { nodes, node, ms };
     }
-    assert.ok(performance.now() - startedAt < LIST_TIMEOUT_MS, `no element labelled "${label}" within ${LIST_TIMEOUT_MS} ms`);
+    assert.ok(
+      performance.now() - startedAt < LIST_TIMEOUT_MS,
+      `no element labelled "${label}" within ${LIST_TIMEOUT_MS} ms`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 }
@@ -142,7 +161,11 @@ try {
 
   step('snapshot -i on the General page');
   const general = await snapshotWith(leased, 'About');
-  assert.equal(general.nodes.some((candidate) => candidate.label === 'Keyboard'), true, 'the General page lists Keyboard');
+  assert.equal(
+    general.nodes.some((candidate) => candidate.label === 'Keyboard'),
+    true,
+    'the General page lists Keyboard',
+  );
 
   step('screenshot of the General page');
   await settledShot(leased, 'general-page.png', shotBefore, pressedAt);

@@ -123,7 +123,10 @@ export function queryHook(socketPath: string, timeoutMs: number, signal: AbortSi
 }
 
 /** The first value to settle that satisfies `match`, or `undefined` once every promise has settled without one. */
-export function firstMatching<T>(promises: readonly Promise<T | undefined>[], match: (value: T) => boolean): Promise<T | undefined> {
+export function firstMatching<T>(
+  promises: readonly Promise<T | undefined>[],
+  match: (value: T) => boolean,
+): Promise<T | undefined> {
   return new Promise((resolve) => {
     let pending = promises.length;
     if (pending === 0) resolve(undefined);
@@ -152,7 +155,8 @@ export async function readFrontTree(dir: string, udid: string, timeoutMs: number
     queries.set(
       pidOf(name),
       queryHook(socketPath, timeoutMs, abort.signal).catch(async (error: unknown) => {
-        if (error instanceof Error && 'code' in error && error.code === 'ECONNREFUSED') await unlink(socketPath).catch(() => undefined);
+        if (error instanceof Error && 'code' in error && error.code === 'ECONNREFUSED')
+          await unlink(socketPath).catch(() => undefined);
         return undefined;
       }),
     );
@@ -162,7 +166,10 @@ export async function readFrontTree(dir: string, udid: string, timeoutMs: number
     if (!springboard) throw new Error(`SpringBoard's accessibility hook did not answer in ${dir}.`);
     if (!springboard.front) return springboard.root;
     const app = await queries.get(springboard.front.pid);
-    if (!app) throw new Error(`The front app ${springboard.front.bundleId} (pid ${springboard.front.pid}) did not answer on its hook socket.`);
+    if (!app)
+      throw new Error(
+        `The front app ${springboard.front.bundleId} (pid ${springboard.front.pid}) did not answer on its hook socket.`,
+      );
     return app.root;
   } finally {
     abort.abort();

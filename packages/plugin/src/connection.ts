@@ -11,10 +11,7 @@ export const DEFAULT_ENDPOINT = 'http://127.0.0.1:4723';
 const STATUS_TIMEOUT_MS = 5_000;
 
 /** Options win over the environment, and the environment wins over the local default. */
-export function resolveEndpoint(
-  endpoint: string | undefined,
-  env: ProviderPluginHost['env'],
-): string {
+export function resolveEndpoint(endpoint: string | undefined, env: ProviderPluginHost['env']): string {
   return endpoint ?? env.X86SIM_WEBDRIVER_ENDPOINT ?? DEFAULT_ENDPOINT;
 }
 
@@ -24,10 +21,7 @@ function rejectProviderFlags(flags: object, host: ProviderPluginHost): void {
     (key) => (flags as Record<string, unknown>)[key] !== undefined,
   );
   if (set.length > 0) {
-    throw host.createError(
-      'INVALID_ARGS',
-      `${SERVICE} does not use these provider flags: ${set.join(', ')}.`,
-    );
+    throw host.createError('INVALID_ARGS', `${SERVICE} does not use these provider flags: ${set.join(', ')}.`);
   }
 }
 
@@ -61,11 +55,9 @@ export function createConnection(options: { endpoint?: string | undefined }): Co
         const body = (await response.json()) as { value?: { ready?: unknown } };
         ready = response.ok ? body.value?.ready : undefined;
       } catch (error) {
-        throw host.createError(
-          'COMMAND_FAILED',
-          `${SERVICE} WebDriver server is not reachable at ${statusUrl.href}.`,
-          { cause: String(error) },
-        );
+        throw host.createError('COMMAND_FAILED', `${SERVICE} WebDriver server is not reachable at ${statusUrl.href}.`, {
+          cause: String(error),
+        });
       }
       if (ready !== true) {
         throw host.createError(

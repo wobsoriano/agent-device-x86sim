@@ -1,11 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { parseActions, toTouchEvents } from './actions.ts';
-import {
-  invalidArgument,
-  invalidSessionId,
-  sessionNotCreated,
-  unknownCommand,
-} from './errors.ts';
+import { invalidArgument, invalidSessionId, sessionNotCreated, unknownCommand } from './errors.ts';
 import type { Handler, Route } from './router.ts';
 import type { Backend, HardwareButton } from './types.ts';
 import { toXcuiSource } from './xcui-source.ts';
