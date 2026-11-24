@@ -170,7 +170,8 @@ agent-device open com.example.myapp
 - Right after a page opens, the snapshot can still list the previous page. Poll until the element you want appears.
 - `open` takes a bundle id, for example `com.apple.Preferences`. It does not take an app name.
 - The first `open` on the Linux machine boots the phone and can take up to 6 minutes. Do not run it again while it runs.
-- These operations return `UNSUPPORTED_OPERATION`: `fill`, `back`, `orientation`, the keyboard state, and the clipboard. To enter text, press the field, then use `type`.
+- These operations return `UNSUPPORTED_OPERATION`: `fill`, `back`, `orientation`, the keyboard state, and the clipboard.
+- To enter text, press the field, then use `type`. Press only after a snapshot taken a few seconds after the page opened. A press on a page that has not drawn yet reports `Tapped` but does nothing, and `type` then goes nowhere. Check the result with `snapshot`, which shows the typed text as the field's value.
 
 ## Troubleshooting
 
@@ -191,5 +192,4 @@ agent-device open com.example.myapp
 - Apps must be arm64 iOS simulator builds. App Store builds and device builds do not run.
 - x86Sim has its own gaps, such as no Maps tiles, no Bonjour, no sensors, and no app sandbox. See [x86Sim's status and limitations](https://github.com/x86sim/x86sim#status-and-limitations).
 - `snapshot -i` reads the app in front. System alerts over an app and web content inside an app are not listed yet.
-- Typing into text fields is not tested yet.
 - x86Sim downloads Apple's iOS simulator runtime to your machine. Apple's license for that runtime covers Apple hardware.
