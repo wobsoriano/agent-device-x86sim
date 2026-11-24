@@ -37,11 +37,14 @@ When agent-device runs on the Linux machine, the plugin starts the server and bo
 
    If an agent-device daemon is running, stop it so that it loads the plugin.
 
-3. Connect.
+3. Name your session, then connect.
 
    ```sh
+   export AGENT_DEVICE_SESSION=x86sim
    agent-device connect x86sim
    ```
+
+   agent-device asks every command on a provider connection to name its session. Set `AGENT_DEVICE_SESSION` once in each shell, or pass `--session <name>` to each command.
 
    Check: the output says `Connected successfully with x86Sim.` and names your phone.
 
@@ -129,6 +132,7 @@ agent-device sends its commands to a WebDriver server that runs next to the simu
 
    ```sh
    agent-device plugins add agent-device-x86sim
+   export AGENT_DEVICE_SESSION=x86sim
    agent-device connect x86sim
    ```
 
@@ -183,6 +187,7 @@ agent-device open com.example.myapp
 | `snapshot -i` lists only `[application]`, or says `UIKit's accessibility is off` | The hook is not loaded, or accessibility is off                                      | Run `npx agent-device-x86sim serve` again. It stops a phone that lacks the hook and boots it again.                   |
 | `--provider-app is not supported by x86Sim`                                      | An old plugin sends the bundle id as `--provider-app`                                | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon.                       |
 | A screenshot shows the screen from before the last `press`                       | The phone has not drawn the new frame yet                                            | Wait 2 seconds and take the screenshot again.                                                                         |
+| `A leased remote connection needs its session named`                             | The shell names no session                                                           | Run `export AGENT_DEVICE_SESSION=x86sim`, or pass `--session <name>`.                                                 |
 | `connect x86sim` is not a known provider                                         | The daemon started before you installed the plugin                                   | Stop the agent-device daemon and run the command again.                                                               |
 
 ## Limits
