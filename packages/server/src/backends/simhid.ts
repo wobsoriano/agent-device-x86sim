@@ -109,3 +109,10 @@ export function parseSimEnv(text: string): DeviceGeometry {
 export function pointSize({ pixels, scale }: DeviceGeometry): Size {
   return { width: pixels.width / scale, height: pixels.height / scale };
 }
+
+/** The phone's identity, which names its sockets. `sim.env` holds it as `SIMULATOR_UDID`. */
+export function parseSimulatorUdid(text: string): string {
+  const found = /^SIMULATOR_UDID=([0-9A-Fa-f-]+)$/m.exec(text);
+  if (!found?.[1]) throw new Error('sim.env has no SIMULATOR_UDID.');
+  return found[1];
+}

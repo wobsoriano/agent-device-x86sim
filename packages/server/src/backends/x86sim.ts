@@ -2,20 +2,25 @@ import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import type { Socket } from 'node:net';
-import { tmpdir } from 'node:os';
+import { tmpdir, userInfo } from 'node:os';
 import path from 'node:path';
 import type { AxNode, Backend, HardwareButton, Size, TouchEvent } from '../types.ts';
-import { buttonSteps, parseSimEnv, pointSize, touchSteps } from './simhid.ts';
+import { buttonSteps, parseSimEnv, parseSimulatorUdid, pointSize, touchSteps } from './simhid.ts';
 import type { SimhidStep } from './simhid.ts';
+import { chooseReply, collectReplies } from './ax-hook.ts';
 
 export type X86SimConfig = {
   /** The x86Sim AppImage. It runs `x86sim <command>` for everything but touch and buttons. */
   appImage: string;
   /** A phone's directory, such as `var/device-a64-iphone-17-pro`. Absolute. */
   device: string;
+  /** Where the accessibility hooks bind their sockets. Defaults to `/run/user/<uid>`. */
+  hookSocketDir?: string;
 };
 
 const CLI_TIMEOUT_MS = 60_000;
+/** One hook that does not answer in this long is left out of the snapshot. */
+const HOOK_TIMEOUT_MS = 2_000;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** The simulator behind an x86Sim AppImage, driven by its CLI and by one simhid connection. */
@@ -88,14 +93,16 @@ export class X86SimBackend implements Backend {
   }
 
   async accessibilityTree(): Promise<AxNode> {
-    // The AX hook is the next milestone, so for now the tree is the application and nothing in it.
-    return {
-      type: 'XCUIElementTypeApplication',
-      frame: { x: 0, y: 0, ...(await this.screen()) },
-      enabled: true,
-      visible: true,
-      children: [],
-    };
+    const udid = parseSimulatorUdid(await readFile(path.join(this.#config.device, 'sim.env'), 'utf8'));
+    const dir = this.#config.hookSocketDir ?? `/run/user/${userInfo().uid}`;
+    const replies = await collectReplies(dir, udid, HOOK_TIMEOUT_MS);
+    const chosen = chooseReply(replies);
+    if (!chosen) {
+      throw new Error(
+        `No accessibility hook answered in ${dir}. Boot the phone with X86SIM_INSERT set to libx86sim-ax.dylib and ApplicationAccessibilityEnabled on.`,
+      );
+    }
+    return chosen.root;
   }
 
   async screenshot(): Promise<Buffer> {
