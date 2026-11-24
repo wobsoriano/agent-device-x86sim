@@ -11,6 +11,8 @@ export type X86Sim = {
   dataDir: string;
   /** `x86sim <args>`. */
   cli(args: readonly string[]): Launch;
+  /** `x86sim-aot <args>`, which checks the machine and pre-translates the runtime. */
+  aot(args: readonly string[]): Launch;
   /** The script that boots and stops arm64 phones. */
   boot(): Launch;
 };
@@ -75,6 +77,11 @@ export function dataDirInstall(parts: DataDirParts): X86Sim {
     label: `x86Sim ${parts.version} in ${parts.dataDir}`,
     dataDir: parts.dataDir,
     cli: (args) => ({ command: path.join(app, 'cli', 'x86sim'), args: [...args], env }),
+    aot: (args) => ({
+      command: path.join(app, 'tools', 'launcher', 'target', 'release', 'x86sim-aot'),
+      args: [...args],
+      env,
+    }),
     boot: () => ({ command: '/bin/sh', args: ['-c', BOOT_SCRIPT], env, cwd: parts.dataDir }),
   };
 }
@@ -85,6 +92,7 @@ export function appImageInstall(appImage: string, dataDir: string): X86Sim {
     label: appImage,
     dataDir,
     cli: (args) => ({ command: appImage, args: ['x86sim', ...args], env: {} }),
+    aot: (args) => ({ command: appImage, args: ['aot', ...args], env: {} }),
     boot: () => ({ command: appImage, args: ['shell', '-c', BOOT_SCRIPT], env: {} }),
   };
 }

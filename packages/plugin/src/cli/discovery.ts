@@ -29,7 +29,7 @@ export type Phone = {
   name: string;
 };
 
-export const QUICK_START_URL = 'https://github.com/x86sim/x86sim#quick-start';
+export const SETUP_COMMAND = 'npx agent-device-x86sim setup';
 const DEVICE_PREFIX = 'device-a64-';
 
 /** x86Sim has not been set up on this machine. Callers that can run without it catch this one. */
@@ -56,7 +56,7 @@ export async function findX86Sim(flag: string | undefined, environment: Environm
     if ((await environment.listDir(path.join(appDir, version))).includes('.complete')) complete.push(version);
   }
   const version = newestVersion(complete);
-  if (!version) throw new NotSetUpError(`x86Sim is not set up. Follow ${QUICK_START_URL}`);
+  if (!version) throw new NotSetUpError(`x86Sim is not set up. Run: ${SETUP_COMMAND}`);
   const mode = env.X86SIM_DARLING_MODE;
   const link = await environment.readLink(path.join(dataDir, 'darling-prefix'));
   return dataDirInstall({
@@ -69,7 +69,7 @@ export async function findX86Sim(flag: string | undefined, environment: Environm
   });
 }
 
-async function listPhones(dataDir: string, environment: Environment): Promise<Phone[]> {
+export async function listPhones(dataDir: string, environment: Environment): Promise<Phone[]> {
   const varDir = path.join(dataDir, 'var');
   const folders = (await environment.listDir(varDir)).filter((name) => name.startsWith(DEVICE_PREFIX)).sort();
   return await Promise.all(
@@ -110,15 +110,13 @@ export async function findPhone(flag: string | undefined, dataDir: string, envir
     }
     throw new Error(
       phones.length === 0
-        ? `No phone found in ${path.join(dataDir, 'var')}. Create one on the Setup page of the x86Sim launcher. ${QUICK_START_URL}`
+        ? `No phone found in ${path.join(dataDir, 'var')}. Run: ${SETUP_COMMAND}`
         : `No phone is named "${flag}". The phones are ${quoted(phones)}.`,
     );
   }
   const [first] = phones;
   if (!first) {
-    throw new Error(
-      `No phone found in ${path.join(dataDir, 'var')}. Create one on the Setup page of the x86Sim launcher. ${QUICK_START_URL}`,
-    );
+    throw new Error(`No phone found in ${path.join(dataDir, 'var')}. Run: ${SETUP_COMMAND}`);
   }
   const running: Phone[] = [];
   for (const phone of phones) if (await environment.isRunning(phone.path)) running.push(phone);

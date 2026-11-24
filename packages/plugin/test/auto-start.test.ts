@@ -9,6 +9,7 @@ const TARGET = {
     label: 'x86Sim 0.5.3',
     dataDir: '/x',
     cli: () => ({ command: 'x', args: [], env: {} }),
+    aot: () => ({ command: 'x', args: [], env: {} }),
     boot: () => ({ command: 'x', args: [], env: {} }),
   },
   device: '/x/var/device-a64-iphone-17-pro',

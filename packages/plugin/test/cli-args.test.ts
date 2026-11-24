@@ -34,6 +34,14 @@ test('serve reads every option', () => {
   });
 });
 
+test('setup creates an iPhone 17 Pro unless told otherwise', () => {
+  assert.deepEqual(parseCli(['setup']), { kind: 'setup', options: { model: 'iPhone 17 Pro' } });
+  assert.deepEqual(parseCli(['setup', '--model', 'iPhone 16e', '--device', 'Work', '--appimage', '/a/x.AppImage']), {
+    kind: 'setup',
+    options: { model: 'iPhone 16e', device: 'Work', appimage: '/a/x.AppImage' },
+  });
+});
+
 test('hook-path, help and no arguments are their own commands', () => {
   assert.deepEqual(parseCli(['hook-path']), { kind: 'hook-path' });
   assert.deepEqual(parseCli([]), { kind: 'help' });

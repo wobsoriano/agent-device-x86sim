@@ -2,6 +2,7 @@
 import { USAGE, UsageError, parseCli } from './cli/args.ts';
 import { packagedHookPath } from './cli/hook-path.ts';
 import { serve } from './cli/serve.ts';
+import { setup } from './cli/setup.ts';
 
 async function main(argv: readonly string[]): Promise<void> {
   const command = parseCli(argv);
@@ -14,6 +15,9 @@ async function main(argv: readonly string[]): Promise<void> {
       return;
     case 'serve':
       await serve(command.options);
+      return;
+    case 'setup':
+      await setup(command.options, (line) => process.stderr.write(`${line}\n`));
       return;
   }
 }

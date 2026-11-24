@@ -83,7 +83,7 @@ test('X86SIM_DATA moves the data folder', async () => {
 test('no data folder means x86Sim is not set up, and says where to start', async () => {
   await assert.rejects(findX86Sim(undefined, machine()), (error: Error) => {
     assert.ok(error instanceof NotSetUpError);
-    assert.equal(error.message, 'x86Sim is not set up. Follow https://github.com/x86sim/x86sim#quick-start');
+    assert.equal(error.message, 'x86Sim is not set up. Run: npx agent-device-x86sim setup');
     return true;
   });
 });
@@ -144,7 +144,10 @@ test('two phones that run is also a choice to make', async () => {
 });
 
 test('no phone says where to create one', async () => {
-  await assert.rejects(findPhone(undefined, DATA, machine(phones({}))), /No phone found in .*Setup page.*quick-start/);
+  await assert.rejects(
+    findPhone(undefined, DATA, machine(phones({}))),
+    /No phone found in .*Run: npx agent-device-x86sim setup/,
+  );
 });
 
 test('--device matches the name the launcher shows, in any case, or the folder name', async () => {

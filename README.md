@@ -24,11 +24,19 @@ When agent-device runs on the Linux machine, the plugin starts the server and bo
 
 ## Use agent-device on the Linux machine
 
-1. Set up x86Sim with its [Quick start](https://github.com/x86sim/x86sim#quick-start).
+1. Set up x86Sim.
 
-   Download the AppImage anywhere and run it. The Setup page of the launcher downloads iOS and creates your first phone. You do not boot the phone, load the hook, or turn on accessibility. The plugin does that for you.
+   ```sh
+   npx agent-device-x86sim setup
+   ```
 
-   Check: the launcher lists a phone.
+   The command downloads x86Sim 0.5.3 to `~/x86sim`, downloads iOS 27.2 from Apple, creates an iPhone 17 Pro, and pre-translates iOS for your processor. iOS is about 8 GB, so the first run takes 10 to 40 minutes. It needs no desktop and no FUSE, so it works over SSH. Each step checks the machine first, so running it again skips what is done. Only the pre-translation runs again after the phone has booted, because each boot shows x86Sim more of the code that iOS uses. That takes under a minute.
+
+   Where the kernel blocks user namespaces, as Ubuntu's default does, the command installs x86Sim's simulator host under `/opt/x86sim` and asks for your password once. x86Sim's launcher does the same.
+
+   If you already set up x86Sim with its [launcher](https://github.com/x86sim/x86sim#quick-start), skip this step. You do not boot the phone, load the hook, or turn on accessibility. The plugin does that for you.
+
+   Check: the last lines start with `Done.` and name the commands to run next.
 
 2. Install the plugin.
 
@@ -111,7 +119,7 @@ If the phone was started by the launcher, or runs an older accessibility hook, t
 
 agent-device sends its commands to a WebDriver server that runs next to the simulator. Device clouds such as BrowserStack run that server for you. x86Sim runs on your machine, so on another machine you start the server yourself.
 
-1. On the Linux machine, start the server.
+1. On the Linux machine, run `npx agent-device-x86sim setup` once, then start the server.
 
    ```sh
    npx agent-device-x86sim serve
@@ -188,7 +196,7 @@ To install without agent-device, run x86Sim's own command on the Linux machine a
 | Symptom                                                                          | Cause                                                                                | Fix                                                                                                                   |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `connect x86sim` says the server is not reachable                                | agent-device runs on another machine, and the server is not running or not forwarded | Run `npx agent-device-x86sim serve` on the Linux machine. Check `curl localhost:4723/status` where agent-device runs. |
-| The plugin or `serve` says x86Sim is not set up                                  | The AppImage never ran on this machine, or it ran with another `X86SIM_DATA`         | Follow the [Quick start](https://github.com/x86sim/x86sim#quick-start). Use the same `X86SIM_DATA` for the plugin.    |
+| The plugin or `serve` says x86Sim is not set up                                  | x86Sim was never set up on this machine, or it was set up with another `X86SIM_DATA` | Run `npx agent-device-x86sim setup`. Use the same `X86SIM_DATA` for the plugin.                                       |
 | The plugin or `serve` says to pick a phone                                       | There is more than one phone and none runs                                           | Run `agent-device connect x86sim --device "<name>"`, or `serve --device "<name>"`.                                    |
 | `serve` says the port is in use                                                  | Another server runs on that port                                                     | Stop it, or pass `--port`.                                                                                            |
 | The plugin does not start the server on the Linux machine                        | `X86SIM_WEBDRIVER_ENDPOINT` is set                                                   | Unset the variable.                                                                                                   |
