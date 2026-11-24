@@ -28,13 +28,17 @@ async function inTempDir(body: (dir: string) => Promise<void>): Promise<void> {
   }
 }
 
-test('a missing file is not on, and enable creates it with both keys in a binary plist', async () => {
+test('a missing file is not on, and enable creates it with all three keys in a binary plist', async () => {
   await inTempDir(async (dir) => {
     const file = path.join(dir, 'Library', 'Preferences', 'com.apple.Accessibility.plist');
     assert.equal(python('check', file), 'false');
     python('enable', file);
     assert.equal(python('check', file), 'true');
-    assert.deepEqual(readPrefs(file), { ApplicationAccessibilityEnabled: true, AccessibilityEnabled: true });
+    assert.deepEqual(readPrefs(file), {
+      ApplicationAccessibilityEnabled: true,
+      AccessibilityEnabled: true,
+      AutomationEnabled: true,
+    });
     assert.equal((await readFile(file)).subarray(0, 8).toString(), 'bplist00');
   });
 });
@@ -52,6 +56,7 @@ test('enable keeps the keys that were there and leaves no temporary file', async
       Keep: 'me',
       ApplicationAccessibilityEnabled: true,
       AccessibilityEnabled: true,
+      AutomationEnabled: true,
     });
     assert.deepEqual(await readdir(dir), ['prefs.plist']);
     assert.equal((await stat(file)).mode & 0o777, 0o644);
@@ -65,5 +70,18 @@ test('enable on a file that is already on does not rewrite it', async () => {
     const before = await stat(file);
     python('enable', file);
     assert.equal((await stat(file)).ino, before.ino);
+  });
+});
+
+test('a file with the two older keys on is still off until automation is on too', async () => {
+  await inTempDir(async (dir) => {
+    const file = path.join(dir, 'prefs.plist');
+    await writeFile(
+      file,
+      '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>ApplicationAccessibilityEnabled</key><true/><key>AccessibilityEnabled</key><true/></dict></plist>',
+    );
+    assert.equal(python('check', file), 'false');
+    python('enable', file);
+    assert.equal(python('check', file), 'true');
   });
 });

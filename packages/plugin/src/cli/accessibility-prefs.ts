@@ -3,14 +3,17 @@
  * Python 3, so it is on every machine that runs this. The Python standard library reads and
  * writes binary property lists, which Node does not.
  *
- * `check <file>` prints `true` when both keys are on. `enable <file>` turns them on, keeps every
- * other key, and replaces the file in one rename so the phone never sees half a file. Run it
- * only while the phone is stopped, because a running phone's `cfprefsd` would overwrite it.
+ * The first two keys make UIKit describe its controls. `AutomationEnabled` makes UIKit build
+ * them the way XCTest sees them, which is the element types the hook reports.
+ *
+ * `check <file>` prints `true` when all three keys are on. `enable <file>` turns them on, keeps
+ * every other key, and replaces the file in one rename so the phone never sees half a file. Run
+ * it only while the phone is stopped, because a running phone's `cfprefsd` would overwrite it.
  */
 export const ACCESSIBILITY_PREFS_SCRIPT = `
 import os, plistlib, sys, tempfile
 mode, path = sys.argv[1], sys.argv[2]
-KEYS = ("ApplicationAccessibilityEnabled", "AccessibilityEnabled")
+KEYS = ("ApplicationAccessibilityEnabled", "AccessibilityEnabled", "AutomationEnabled")
 try:
     with open(path, "rb") as f:
         prefs = plistlib.load(f)
