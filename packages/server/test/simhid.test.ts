@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vite-plus/test';
 import { MIN_TOUCH_MS, buttonSteps, edgeAt, parseSimEnv, pointSize, touchSteps } from '../src/backends/simhid.ts';
 import type { SimhidStep } from '../src/backends/simhid.ts';
 import type { Size, TouchEvent } from '../src/types.ts';

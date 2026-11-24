@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vite-plus/test';
 import x86sim from '../src/index.ts';
 import { X86SIM_PROFILE_FIELDS } from '../src/profile-fields.ts';
 

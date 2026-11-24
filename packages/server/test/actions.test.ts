@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vite-plus/test';
 import { parseActions, toTouchEvents } from '../src/actions.ts';
 import { WebDriverError } from '../src/errors.ts';
 import type { TouchEvent, W3cActionSequence, W3cPointerAction } from '../src/types.ts';

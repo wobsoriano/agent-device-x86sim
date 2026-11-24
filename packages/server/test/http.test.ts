@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import { after, before, test } from 'node:test';
+import { afterAll, beforeAll, test } from 'vite-plus/test';
 import { FAKE_CONTINUE_FRAME, FakeBackend, fakeRoutes } from '../src/backends/fake.ts';
 import { createServer } from '../src/server.ts';
 
@@ -13,11 +13,11 @@ const server = createServer({
 });
 let base = '';
 
-before(async () => {
+beforeAll(async () => {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
-after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
 async function call(method: string, path: string, body?: unknown) {
   const response = await fetch(`${base}${path}`, {

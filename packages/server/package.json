@@ -5,7 +5,8 @@
   "description": "A small WebDriver server in front of an x86Sim iOS simulator backend.",
   "type": "module",
   "scripts": {
-    "start": "node src/main.ts --backend fake --port 4723"
+    "start": "node src/main.ts --backend fake --port 4723",
+    "test": "vp test"
   },
   "devDependencies": {
     "@types/node": "catalog:",

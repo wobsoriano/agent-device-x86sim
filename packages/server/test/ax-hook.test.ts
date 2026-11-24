@@ -4,7 +4,7 @@ import { access, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import type { Server } from 'node:net';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vite-plus/test';
 import { SPRINGBOARD_BUNDLE_ID, firstMatching, hookSocketNames, parseHookReply, readFrontTree } from '../src/backends/ax-hook.ts';
 import { parseSimulatorUdid } from '../src/backends/simhid.ts';
 import type { AxNode } from '../src/types.ts';
