@@ -103,7 +103,7 @@ agent-device connect x86sim --device "iPhone 17 Pro"
 
 The plugin starts its server only on Linux and only when no server address is set.
 
-If the phone was started by the launcher, the plugin restarts it once to load the accessibility hook.
+If the phone was started by the launcher, or runs an older accessibility hook, the plugin restarts it once to load the current hook and turn on accessibility.
 
 ## Run agent-device on another machine
 
