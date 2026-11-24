@@ -1,68 +1,171 @@
 # agent-device-x86sim
 
-Let [agent-device](https://github.com/callstack/agent-device) drive an iOS simulator running under x86Sim, through agent-device's built-in WebDriver engine.
+An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). You keep the usual agent-device commands: `open`, `snapshot -i`, `press @e3`, and `screenshot`. No Mac runs the phone.
 
-Milestone 1 proves the plumbing against a fake simulator backend. Milestone 2 adds the real x86Sim backend and a live run against an iPhone 17 Pro on a Linux VM. Milestone 3 reads the accessibility tree inside the phone, so `snapshot -i` lists real elements and `@eN` refs press them.
+The plugin is not on npm yet. Until it is, install it from a local registry as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-- `packages/server` is `x86sim-webdriver`, a small WebDriver server. It owns the protocol. A `Backend` owns the simulator, and input reaches it as a stream of `down`, `move`, `up` and `pause` touch events.
-- `packages/ax-hook` is `libx86sim-ax.dylib`, a small iOS-simulator library that runs inside the phone and answers accessibility queries on a Unix socket. It is C built on a Mac with `build.sh`, so it is not a pnpm workspace package.
-- `packages/plugin` is `agent-device-x86sim`, an agent-device provider plugin (`apiVersion` 2) that points the WebDriver engine at that server.
+## How it fits together
 
-This is a [Vite+](https://viteplus.dev) monorepo on pnpm workspaces. Install the `vp` CLI once, then run everything through it.
-
-```sh
-vp install
-vp check                 # format, lint and type checks
-vp run -r test           # unit tests and an HTTP round trip, in vitest
-vp run -r build          # bundles the plugin to packages/plugin/dist with vp pack
-vp run e2e               # builds the plugin, then runs scripts/e2e.ts
-vp run ready             # check, test and build, the same gate in one go
-node packages/server/src/main.ts --backend fake --port 4723
+```
+agent-device + plugin  ──HTTP──▶  x86sim-webdriver  ──▶  x86Sim  ──▶  iPhone simulator
+(any machine)                     (Linux machine)        (Linux machine)
 ```
 
-`scripts/e2e.ts` starts the fake server, starts agent-device in this process with the plugin, opens a session, takes an interactive snapshot, presses "Continue", and checks the fake backend's `GET /__fake/log` for a touch inside the button. The server logs one line per request to stderr.
+- The plugin tells agent-device where the server is.
+- The server, `x86sim-webdriver`, runs next to x86Sim. It turns agent-device's WebDriver requests into x86Sim input and screenshots.
+- The accessibility hook, `libx86sim-ax.dylib`, runs inside the phone. It gives the server the list of elements on screen, which `snapshot -i` shows.
 
-## Live run against x86Sim
+## Requirements
 
-The x86sim backend runs on the Linux host that runs the phone. Touch and hardware buttons go to the phone's simhid socket over one persistent connection, and everything else goes through `x86sim <command>` in the AppImage.
+- A Linux machine that meets [x86Sim's requirements](https://github.com/x86sim/x86sim#requirements): x86-64, glibc 2.39 or newer (Ubuntu 24.04 or newer), 8 GB of memory (16 GB recommended), and 45 GB of free disk. A GPU is optional. Without one, the phone draws in software and is slower.
+- Node.js 22.18 or newer on the Linux machine.
+- agent-device 0.21.35 or newer, on the Linux machine or on another machine.
+- A Mac with Xcode, once, to build the accessibility hook.
 
-```sh
-# on the VM
-node packages/server/src/main.ts --backend x86sim --appimage ~/x86sim/x86sim-0.5.3-x86_64.AppImage \
-  --device ~/.local/share/x86sim/var/device-a64-iphone-17-pro --port 4723
-# on the Mac
-boat forward <sandbox> --remote 4723 --local 4723 &
-vp run agent-device-x86sim#build && node scripts/e2e-live.ts [outDir]   # screenshots land in live-out/ by default
-```
-
-### The accessibility hook
-
-The hook is loaded into every phone process at boot. It needs three things, none of which a running phone has by default.
+The examples use these paths. Change them to match your machine.
 
 ```sh
-# on the Mac
-packages/ax-hook/build.sh                      # packages/ax-hook/build/libx86sim-ax.dylib, arm64 iOS simulator, ad-hoc signed
-boat scp packages/ax-hook/build/libx86sim-ax.dylib <sandbox>:/home/user/ax-hook/libx86sim-ax.dylib
-# on the VM, with the phone stopped (A64_STOP_ONLY=1 ... boot-a64.sh): turn on app accessibility
-python3 - <<'PY'
-import plistlib
-p = "/home/user/.local/share/x86sim/var/device-a64-iphone-17-pro/data/Library/Preferences/com.apple.Accessibility.plist"
-d = plistlib.load(open(p, "rb"))
-d.update(ApplicationAccessibilityEnabled=True, AccessibilityEnabled=True)
-plistlib.dump(d, open(p, "wb"), fmt=plistlib.FMT_BINARY)
-PY
-# boot with the hook (x86Sim adds X86SIM_INSERT to DYLD_INSERT_LIBRARIES of every phone process)
-X86SIM_INSERT=/home/user/ax-hook/libx86sim-ax.dylib A64_DEVICE=var/device-a64-iphone-17-pro A64_KEEP=1 X86SIM_METAL=0 \
-  ./x86sim-0.5.3-x86_64.AppImage shell -c cli/libexec/arm64/boot-a64.sh
+export X86SIM=~/x86sim/x86sim-0.5.3-x86_64.AppImage
+export X86SIM_DEVICE=~/.local/share/x86sim/var/device-a64-iphone-17-pro
 ```
 
-Every process that starts UIKit binds `/run/user/<uid>/x86sim-ax-<SIMULATOR_UDID>-<pid>.sock`. A client sends `tree\n` and reads one JSON line, `{ pid, bundleId, root }`, where `root` is an `AxNode`. SpringBoard's answer also holds `front`, the app in front or `null` on the home screen. `tree debug\n` adds each element's class and traits. The server asks SpringBoard first and then only the front app, because a suspended app accepts the connection and never answers.
+## Set up the Linux machine
+
+1. Install x86Sim and download iOS.
+
+   Download the AppImage from the [latest x86Sim release](https://github.com/x86sim/x86sim/releases/latest) and make it executable. Then run:
+
+   ```sh
+   $X86SIM aot setup check
+   $X86SIM x86sim runtime fetch 24B8117                   # iOS 27.2, about 8 GB from Apple
+   $X86SIM x86sim device create --model "iPhone 17 Pro"
+   ```
+
+   Check: `$X86SIM x86sim device list` shows `device-a64-iphone-17-pro`.
+
+2. Build the accessibility hook on a Mac, then copy it to the Linux machine.
+
+   ```sh
+   # on the Mac, in this repository
+   packages/ax-hook/build.sh
+   scp packages/ax-hook/build/libx86sim-ax.dylib linux-box:~/ax-hook/libx86sim-ax.dylib
+   ```
+
+3. Turn on accessibility inside the phone.
+
+   UIKit describes its controls only when accessibility is on. Do this once, while the phone is stopped.
+
+   ```sh
+   python3 - <<'PY'
+   import os, plistlib
+   p = os.path.expanduser("~/.local/share/x86sim/var/device-a64-iphone-17-pro/data/Library/Preferences/com.apple.Accessibility.plist")
+   d = plistlib.load(open(p, "rb")) if os.path.exists(p) else {}
+   d.update(ApplicationAccessibilityEnabled=True, AccessibilityEnabled=True)
+   plistlib.dump(d, open(p, "wb"), fmt=plistlib.FMT_BINARY)
+   PY
+   ```
+
+4. Boot the phone with the hook loaded.
+
+   ```sh
+   cd ~/x86sim
+   X86SIM_INSERT=$HOME/ax-hook/libx86sim-ax.dylib A64_DEVICE=var/device-a64-iphone-17-pro A64_KEEP=1 \
+     $X86SIM shell -c cli/libexec/arm64/boot-a64.sh
+   $X86SIM x86sim wait home 540
+   ```
+
+   On a machine without a GPU, add `X86SIM_METAL=0` before `X86SIM_INSERT`.
+
+   Check: `wait home` exits with code 0. A boot takes 1.5 to 6 minutes.
+
+5. Start the server from a copy of this repository.
+
+   ```sh
+   node packages/server/src/main.ts --backend x86sim --appimage $X86SIM --device $X86SIM_DEVICE --port 4723
+   ```
+
+   Check: `curl -s localhost:4723/status` prints `{"value":{"ready":true,...}}`.
+
+## Connect agent-device
+
+1. Install the plugin.
+
+   ```sh
+   agent-device plugins add agent-device-x86sim
+   ```
+
+   If an agent-device daemon is running, stop it so that it loads the plugin.
+
+2. If agent-device runs on a different machine, forward the server port to it.
+
+   ```sh
+   ssh -N -L 4723:localhost:4723 linux-box &
+   ```
+
+   The plugin uses `http://127.0.0.1:4723`. To use another address, set `X86SIM_WEBDRIVER_ENDPOINT`.
+
+3. Connect.
+
+   ```sh
+   agent-device connect x86sim
+   ```
+
+   Check: the output says `Connected successfully with x86Sim.` and `x86Sim WebDriver server is ready`.
+
+## Use it
 
 ```sh
-python3 - <<'PY'   # a direct query on the VM
-import socket; s = socket.socket(socket.AF_UNIX); s.connect("/run/user/1000/x86sim-ax-<udid>-<pid>.sock")
-s.sendall(b"tree debug\n"); print(s.makefile().readline())
-PY
+agent-device open com.apple.Preferences
+agent-device snapshot -i
+agent-device press @e2
+agent-device screenshot ./screen.png
+agent-device home
+agent-device close
+agent-device disconnect
 ```
 
-`scripts/e2e-live.ts` goes through agent-device. It opens Settings, presses Home, lists the home screen with `snapshot -i`, presses the Settings icon by its `@eN` ref, lists Settings, presses the General row by ref, and saves a screenshot of the General page. x86Sim shows an input's result seconds later, so the script waits for the elements, and for the pixels to change, before it moves on.
+A `snapshot -i` in Settings looks like this:
+
+```
+@e1 [application] "Preferences"
+@e2 [button] "General"
+@e3 [button] "Accessibility"
+@e4 [button] "Action Button"
+```
+
+To test your own app, install an arm64 iOS simulator build on the Linux machine, then open it by its bundle id.
+
+```sh
+# on the Linux machine
+X86SIM_DEVICE=$X86SIM_DEVICE $X86SIM x86sim install ./MyApp.app
+# where agent-device runs
+agent-device open com.example.myapp
+```
+
+`agent-device install` sends a path on the machine that runs agent-device. The server looks for that path on the Linux machine, so `install` works only when both run on the same machine.
+
+## Notes for agents
+
+- Take a new `snapshot -i` after every `press`. Refs such as `@e3` change from one snapshot to the next.
+- The phone shows the result of an input 1 to 15 seconds later, depending on the machine. If the element you expect is missing, wait 2 seconds and take another snapshot. Do not press again.
+- Right after a page opens, the snapshot can still list the previous page. Poll until the element you want appears.
+- `open` takes a bundle id, for example `com.apple.Preferences`. It does not take an app name.
+- These operations return `UNSUPPORTED_OPERATION`: `fill`, `back`, `orientation`, the keyboard state, and the clipboard. To enter text, press the field, then use `type`.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `connect x86sim` says the server is not reachable | The server is not running, or the port is not forwarded | Start the server (Linux step 5). Check `curl localhost:4723/status` on the machine that runs agent-device. |
+| `snapshot -i` lists only `[application]` | The hook is not loaded, or accessibility is off | Repeat Linux steps 3 and 4. Stop the phone first with `A64_STOP_ONLY=1` in place of `A64_KEEP=1`. |
+| `--provider-app is not supported by x86Sim` | The plugin version is older than this fix | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon. |
+| A screenshot shows the screen from before the last `press` | The phone has not drawn the new frame yet | Wait 2 seconds and take the screenshot again. |
+| `connect x86sim` is not a known provider | The daemon started before you installed the plugin | Stop the agent-device daemon and run the command again. |
+
+## Limits
+
+- Apps must be arm64 iOS simulator builds. App Store builds and device builds do not run.
+- x86Sim has its own gaps: no Maps tiles, no Bonjour, no sensors, and no app sandbox. See [x86Sim's status and limitations](https://github.com/x86sim/x86sim#status-and-limitations).
+- `snapshot -i` reads the app in front. System alerts over an app and web content inside an app are not listed yet.
+- Typing into text fields is not tested yet.
+- x86Sim downloads Apple's iOS simulator runtime to your machine. Apple's license for that runtime covers Apple hardware.
