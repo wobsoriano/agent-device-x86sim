@@ -4,3 +4,4 @@ dist/
 *.tgz
 .state*/
 live-out/
+packages/ax-hook/build/
