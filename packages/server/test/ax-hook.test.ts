@@ -11,6 +11,7 @@ import {
   hookSocketNames,
   parseHookReply,
   readFrontTree,
+  readFrontTreeWhenListening,
 } from '../src/backends/ax-hook.ts';
 import { parseSimulatorUdid } from '../src/backends/simhid.ts';
 import type { AxNode } from '../src/types.ts';
@@ -102,9 +103,40 @@ test("with an app in front the tree is that app's, whichever hooks also answer",
 test('a front app whose hook is missing or silent fails the snapshot with its name', async () => {
   await withHooks(async (dir, add) => {
     await add(80, 'answer', springboardBody({ pid: 1817, bundleId: 'com.apple.Preferences' }));
-    await assert.rejects(readFrontTree(dir, UDID, 5_000), /com\.apple\.Preferences \(pid 1817\) did not answer/);
+    await assert.rejects(readFrontTree(dir, UDID, 5_000), /com\.apple\.Preferences \(pid 1817\) has no hook socket/);
     await add(1817, 'hang', '');
     await assert.rejects(readFrontTree(dir, UDID, 300), /did not answer/);
+  });
+});
+
+test('a front app that binds its hook socket a moment later is waited for', async () => {
+  await withHooks(async (dir, add) => {
+    await add(80, 'answer', springboardBody({ pid: 1817, bundleId: 'com.apple.Preferences' }));
+    setTimeout(() => void add(1817, 'answer', appBody(1817, 'com.apple.Preferences', 'General')), 400);
+    const root = await readFrontTreeWhenListening(dir, UDID, 5_000, 5_000, 100);
+    assert.equal(JSON.stringify(root).includes('General'), true);
+  });
+});
+
+test('a front app that never binds a socket fails after the wait, naming the app', async () => {
+  await withHooks(async (dir, add) => {
+    await add(80, 'answer', springboardBody({ pid: 1817, bundleId: 'com.apple.Preferences' }));
+    const started = Date.now();
+    await assert.rejects(
+      readFrontTreeWhenListening(dir, UDID, 5_000, 600, 100),
+      /com\.apple\.Preferences \(pid 1817\) has no hook socket/,
+    );
+    assert.ok(Date.now() - started >= 400, 'it waited');
+  });
+});
+
+test('a front app whose hook is silent is not waited for', async () => {
+  await withHooks(async (dir, add) => {
+    await add(80, 'answer', springboardBody({ pid: 1817, bundleId: 'com.apple.Preferences' }));
+    await add(1817, 'hang', '');
+    const started = Date.now();
+    await assert.rejects(readFrontTreeWhenListening(dir, UDID, 300, 5_000, 100), /did not answer/);
+    assert.ok(Date.now() - started < 2_000, 'it failed at once');
   });
 });
 

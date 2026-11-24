@@ -7,7 +7,7 @@ import path from 'node:path';
 import type { AxNode, Backend, HardwareButton, Size, TouchEvent } from '../types.ts';
 import { buttonSteps, parseSimEnv, parseSimulatorUdid, pointSize, touchSteps } from './simhid.ts';
 import type { SimhidStep } from './simhid.ts';
-import { readFrontTree } from './ax-hook.ts';
+import { readFrontTreeWhenListening } from './ax-hook.ts';
 
 /** A command to spawn. */
 export type CliLaunch = { command: string; args: string[]; env?: Record<string, string> };
@@ -27,6 +27,8 @@ export const defaultHookSocketDir = (): string => `/run/user/${userInfo().uid}`;
 const CLI_TIMEOUT_MS = 60_000;
 /** A hook that does not answer in this long fails the snapshot. A phone that is still booting answers in seconds. */
 const HOOK_TIMEOUT_MS = 5_000;
+/** A launched app takes a few seconds to start UIKit and bind its hook socket. */
+const LAUNCH_WAIT_MS = 15_000;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** The simulator behind an x86Sim AppImage, driven by its CLI and by one simhid connection. */
@@ -109,7 +111,7 @@ export class X86SimBackend implements Backend {
   async accessibilityTree(): Promise<AxNode> {
     const udid = parseSimulatorUdid(await readFile(path.join(this.#config.device, 'sim.env'), 'utf8'));
     const dir = this.#config.hookSocketDir ?? defaultHookSocketDir();
-    return await readFrontTree(dir, udid, HOOK_TIMEOUT_MS);
+    return await readFrontTreeWhenListening(dir, udid, HOOK_TIMEOUT_MS, LAUNCH_WAIT_MS);
   }
 
   async screenshot(): Promise<Buffer> {

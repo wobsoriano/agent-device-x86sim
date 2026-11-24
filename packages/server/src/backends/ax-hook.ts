@@ -139,6 +139,9 @@ export function firstMatching<T>(
   });
 }
 
+/** SpringBoard names a front app that has not bound its hook socket yet, which a freshly launched app has not. */
+export class FrontAppNotListening extends Error {}
+
 const pidOf = (name: string): number => Number(/-(\d+)\.sock$/.exec(name)?.[1]);
 
 /**
@@ -165,6 +168,11 @@ export async function readFrontTree(dir: string, udid: string, timeoutMs: number
     const springboard = await firstMatching([...queries.values()], (reply) => reply.bundleId === SPRINGBOARD_BUNDLE_ID);
     if (!springboard) throw new Error(`SpringBoard's accessibility hook did not answer in ${dir}.`);
     if (!springboard.front) return springboard.root;
+    if (!queries.has(springboard.front.pid)) {
+      throw new FrontAppNotListening(
+        `The front app ${springboard.front.bundleId} (pid ${springboard.front.pid}) has no hook socket yet.`,
+      );
+    }
     const app = await queries.get(springboard.front.pid);
     if (!app)
       throw new Error(
@@ -173,5 +181,29 @@ export async function readFrontTree(dir: string, udid: string, timeoutMs: number
     return app.root;
   } finally {
     abort.abort();
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * {@link readFrontTree}, which waits up to `waitMs` for an app that was launched a moment ago to
+ * bind its hook socket. An app that answers badly, or a phone without SpringBoard's hook, fails at once.
+ */
+export async function readFrontTreeWhenListening(
+  dir: string,
+  udid: string,
+  timeoutMs: number,
+  waitMs: number,
+  retryMs = 500,
+): Promise<AxNode> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      return await readFrontTree(dir, udid, timeoutMs);
+    } catch (error) {
+      if (!(error instanceof FrontAppNotListening) || Date.now() + retryMs > deadline) throw error;
+      await sleep(retryMs);
+    }
   }
 }
