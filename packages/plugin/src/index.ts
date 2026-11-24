@@ -1,5 +1,6 @@
 import type { AgentDevicePlugin } from 'agent-device/plugins';
 import type { WebDriverPluginOptions } from 'agent-device/plugins/webdriver';
+import { INSTALL_TIMEOUT_MS } from '../../server/src/backends/x86sim.ts';
 import { createAutoServer, findAutoTarget } from './auto-start.ts';
 import { DEFAULT_DEVICE, PROVIDER, chosenPhone, createConnection, resolveEndpoint } from './connection.ts';
 import { X86SIM_PROFILE_FIELDS } from './profile-fields.ts';
@@ -47,6 +48,9 @@ export default function x86sim(options: X86SimOptions = {}): AgentDevicePlugin {
             'appium:deviceName': DEFAULT_DEVICE,
           },
           capabilityOverrides: CAPABILITY_OVERRIDES,
+          // One timeout covers every request, and an install after a cold boot takes over the engine's 30 s
+          // default. It sits past the server's longest command, so the server reports a hang first.
+          requestPolicy: { timeoutMs: INSTALL_TIMEOUT_MS + 10_000 },
           prepareSession: async ({ base, req }) => {
             const target = await findAutoTarget(options.endpoint, host.env, chosenPhone(req?.flags?.device));
             const endpoint = target ? await auto.endpoint(target) : base.endpoint;

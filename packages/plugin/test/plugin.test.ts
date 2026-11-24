@@ -49,6 +49,12 @@ test('operations the server cannot answer are marked unsupported', async () => {
   }
 });
 
+test('a request may run longer than an install after a cold boot, which passed 30 s on a real phone', async () => {
+  const setup = await x86sim().setup(host as never);
+  assert.ok('webDriver' in setup);
+  assert.ok((setup.webDriver.requestPolicy?.timeoutMs ?? 0) > 180_000);
+});
+
 test('snapshot keeps the engine default, because the tree is real', async () => {
   const setup = await x86sim().setup(host as never);
   assert.ok('webDriver' in setup);

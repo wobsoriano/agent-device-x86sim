@@ -25,6 +25,8 @@ export type X86SimConfig = {
 export const defaultHookSocketDir = (): string => `/run/user/${userInfo().uid}`;
 
 const CLI_TIMEOUT_MS = 60_000;
+/** `x86sim install` waits up to 120 s for the phone's installer, then translates the app ahead of time. */
+export const INSTALL_TIMEOUT_MS = 180_000;
 /** A hook that does not answer in this long fails the snapshot. A phone that is still booting answers in seconds. */
 const HOOK_TIMEOUT_MS = 5_000;
 /** A launched app takes a few seconds to start UIKit and bind its hook socket. */
@@ -48,13 +50,13 @@ export class X86SimBackend implements Backend {
     return this.#geometry;
   }
 
-  #cli(args: string[]): Promise<string> {
+  #cli(args: string[], timeout = CLI_TIMEOUT_MS): Promise<string> {
     return new Promise((resolve, reject) => {
       const launch = this.#config.cli(args);
       execFile(
         launch.command,
         launch.args,
-        { env: { ...process.env, ...launch.env, X86SIM_DEVICE: this.#config.device }, timeout: CLI_TIMEOUT_MS },
+        { env: { ...process.env, ...launch.env, X86SIM_DEVICE: this.#config.device }, timeout },
         (error, stdout, stderr) => {
           if (error) reject(new Error(`x86sim ${args[0]} failed: ${stderr.trim() || error.message}`));
           else resolve(stdout);
@@ -138,7 +140,7 @@ export class X86SimBackend implements Backend {
   }
 
   async installApp(appPath: string): Promise<void> {
-    await this.#cli(['install', appPath]);
+    await this.#cli(['install', appPath], INSTALL_TIMEOUT_MS);
   }
 
   async launchApp(bundleId: string): Promise<void> {
