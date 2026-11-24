@@ -2,8 +2,6 @@
 
 An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). In this README, "the phone" is the simulated iPhone that x86Sim runs.
 
-The package is not on npm yet. Until it is, install it from a local registry as described in [CONTRIBUTING.md](CONTRIBUTING.md).
-
 ## How it fits together
 
 ```

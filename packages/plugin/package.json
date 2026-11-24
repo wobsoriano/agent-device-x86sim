@@ -2,6 +2,26 @@
   "name": "agent-device-x86sim",
   "version": "0.1.0",
   "description": "Run an iOS simulator on Linux through x86Sim and drive it with agent-device. One package: the agent-device plugin and the `agent-device-x86sim` command.",
+  "keywords": [
+    "agent-device",
+    "agent-device-plugin",
+    "ai-agents",
+    "ios",
+    "ios-simulator",
+    "linux",
+    "webdriver",
+    "x86sim"
+  ],
+  "homepage": "https://github.com/wobsoriano/agent-device-x86sim#readme",
+  "bugs": {
+    "url": "https://github.com/wobsoriano/agent-device-x86sim/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wobsoriano/agent-device-x86sim.git",
+    "directory": "packages/plugin"
+  },
   "bin": {
     "agent-device-x86sim": "./dist/cli.js"
   },
@@ -19,7 +39,8 @@
   "scripts": {
     "build": "vp pack",
     "dev": "vp pack --watch",
-    "test": "vp test"
+    "test": "vp test",
+    "prepack": "cp ../../README.md ../../LICENSE ."
   },
   "devDependencies": {
     "@types/node": "catalog:",
@@ -30,6 +51,11 @@
   },
   "peerDependencies": {
     "agent-device": ">=0.21.35"
+  },
+  "peerDependenciesMeta": {
+    "agent-device": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=22.18.0"

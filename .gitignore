@@ -6,3 +6,5 @@ dist/
 live-out/
 packages/ax-hook/build/
 packages/plugin/ax-hook/
+packages/plugin/README.md
+packages/plugin/LICENSE
