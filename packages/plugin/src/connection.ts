@@ -32,7 +32,8 @@ export function createConnection(options: { endpoint?: string | undefined }): Co
       requiresAppAttachment: false,
       requiresRemoteDaemon: false,
       supportsArtifacts: false,
-      supportsDeferredAppSelection: true,
+      // `open <bundle id>` launches an installed app. Deferred selection would send it as --provider-app instead.
+      supportsDeferredAppSelection: false,
       supportsDirectPortReverse: false,
       usesCloudWebDriverLease: true,
     },
