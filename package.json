@@ -1,0 +1,23 @@
+{
+  "name": "agent-device-x86sim-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/plugin",
+    "packages/server"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "npm run build -w agent-device-x86sim",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test",
+    "e2e": "npm run build && node scripts/e2e.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "agent-device": "0.21.35",
+    "typescript": "~5.9.3"
+  }
+}
