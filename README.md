@@ -180,6 +180,7 @@ To install without agent-device, run x86Sim's own command on the Linux machine a
 - The first `open` on the Linux machine boots the phone and can take up to 6 minutes. Do not run it again while it runs.
 - These operations return `UNSUPPORTED_OPERATION`: `fill`, `back`, `orientation`, the keyboard state, and the clipboard.
 - To enter text, press the field, then use `type`. Press only after a snapshot taken a few seconds after the page opened. A press on a page that has not drawn yet reports `Tapped` but does nothing, and `type` then goes nowhere. Check the result with `snapshot`, which shows the typed text as the field's value.
+- Wait about 4 seconds between pressing a field and `type`. Typed right away, `Rob` sometimes arrives as `ROB` in a field that capitalizes words. `wait text` ignores case, so read the value in `snapshot -i`.
 
 ## Troubleshooting
 
