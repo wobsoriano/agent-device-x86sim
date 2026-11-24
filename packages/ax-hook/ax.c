@@ -5,8 +5,13 @@
 // that file as /run/user/<uid>/x86sim-ax-<udid>-<pid>.sock. A client sends "tree\n" and gets one line of JSON back,
 // then the hook closes the connection:
 //
-//   { "pid": 123, "bundleId": "com.apple.Preferences", "active": true, "root": AxNode }
+//   { "pid": 123, "bundleId": "com.apple.Preferences", "root": AxNode }
 //
+// SpringBoard's answer also says which app is in front, since a suspended app cannot answer and only SpringBoard knows:
+//
+//   { "pid": 80, "bundleId": "com.apple.springboard", "front": { "pid": 123, "bundleId": "..." } | null, "root": AxNode }
+//
+// "tree debug\n" adds each element's class and accessibility traits, which a reader of the shape ignores.
 // AxNode is the shape of packages/server/src/types.ts. The walk runs on the main queue and follows UIKit's
 // accessibility containers and subviews the way VoiceOver does. The library links nothing but libobjc and libSystem,
 // so a daemon that never loads UIKit pays nothing for it. UIKit is reached through the Objective-C runtime.
@@ -104,12 +109,13 @@ static void putstr(const char *s) {
 
 enum {
 	TraitButton = 1ul << 0, TraitLink = 1ul << 1, TraitImage = 1ul << 2, TraitStaticText = 1ul << 6,
-	TraitNotEnabled = 1ul << 8, TraitSearchField = 1ul << 10, TraitAdjustable = 1ul << 12, TraitHeader = 1ul << 16,
+	TraitNotEnabled = 1ul << 8, TraitSearchField = 1ul << 10, TraitHeader = 1ul << 16,
 	TraitTextEntry = 1ul << 18,  // UIKit's private trait for text entry
 };
 
 static Rect g_screen;
 static int g_nodes;
+static bool g_debug;
 
 static const char *type_of(id e, unsigned long traits) {
 	if (kind(e, "UITextField")) return getb(e, "isSecureTextEntry") ? "SecureTextField" : "TextField";
@@ -121,7 +127,6 @@ static const char *type_of(id e, unsigned long traits) {
 	if (traits & TraitTextEntry) return "TextField";
 	if (traits & TraitLink) return "Link";
 	if (traits & TraitButton) return "Button";
-	if (traits & TraitAdjustable) return "Slider";
 	if (traits & TraitImage) return "Image";
 	if (traits & (TraitStaticText | TraitHeader)) return "StaticText";
 	return "Other";
@@ -154,8 +159,10 @@ static void emit_element(id e, int *siblings) {
 	if (ident && *ident) { puts_(",\"name\":"); putstr(ident); }
 	if (label && *label) { puts_(",\"label\":"); putstr(label); }
 	if (value && *value) { puts_(",\"value\":"); putstr(value); }
-	putf(",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},\"enabled\":%s,\"visible\":%s,\"children\":[]}", f.x,
-	     f.y, f.w, f.h, enabled ? "true" : "false", intersects_screen(f) ? "true" : "false");
+	putf(",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},\"enabled\":%s,\"visible\":%s", f.x, f.y, f.w, f.h,
+	     enabled ? "true" : "false", intersects_screen(f) ? "true" : "false");
+	if (g_debug) putf(",\"class\":\"%s\",\"traits\":%lu", object_getClassName(e), traits);
+	puts_(",\"children\":[]}");
 }
 
 /// Emits the accessibility elements at or below `o` into the open children array of the caller.
@@ -197,6 +204,21 @@ static const char *bundle_id(void) {
 	return id_ ? id_ : is_springboard() ? "com.apple.springboard" : getprogname();
 }
 
+/// SpringBoard only: the app in front, or null on the home screen. Foreground system UI such as the keyboard's
+/// InputUI process is not an app.
+static void put_front(id springboard) {
+	id front = get(springboard, "_accessibilityFrontMostApplication");
+	id state = get(front, "processState");
+	const char *bundle = utf8(get(front, "bundleIdentifier"));
+	if (!front || !state || !getb(state, "isForeground") || !bundle || strstr(bundle, "InputUI")) {
+		puts_(",\"front\":null");
+		return;
+	}
+	putf(",\"front\":{\"pid\":%ld,\"bundleId\":", getl(state, "pid"));
+	putstr(bundle);
+	puts_("}");
+}
+
 static void build_tree(void) {
 	len = 0;
 	g_nodes = 0;
@@ -204,12 +226,10 @@ static void build_tree(void) {
 	Class screenClass = objc_getClass("UIScreen");
 	id screen = screenClass ? get((id)screenClass, "mainScreen") : nil;
 	g_screen = getrect(screen, "bounds");
-	// UIApplicationStateActive is 0. SpringBoard owns the home screen and is always in front of nothing else.
-	bool active = is_springboard() || (app && getl(app, "applicationState") == 0);
 	putf("{\"pid\":%d,\"bundleId\":", getpid());
 	putstr(bundle_id());
-	putf(",\"active\":%s,\"root\":{\"type\":\"XCUIElementTypeApplication\",", active ? "true" : "false");
-	puts_("\"label\":");
+	if (is_springboard()) put_front(app);
+	puts_(",\"root\":{\"type\":\"XCUIElementTypeApplication\",\"label\":");
 	putstr(getprogname());
 	putf(",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},\"enabled\":true,\"visible\":true,\"children\":[", g_screen.x,
 	     g_screen.y, g_screen.w, g_screen.h);
@@ -218,13 +238,20 @@ static void build_tree(void) {
 	for (unsigned long i = 0, n = count(windows); i < n; i++) {
 		id win = at(windows, i);
 		if (getb(win, "isHidden") || getd(win, "alpha") < 0.01) continue;
+		// A window with no element leaves no trace: it is written first, and taken back when the walk finds nothing.
+		size_t mark = len;
 		Rect f = getrect(win, "frame");
-		if (windowCount++ > 0) puts_(",");
-		putf("{\"type\":\"XCUIElementTypeWindow\",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},", f.x, f.y, f.w, f.h);
+		putf("%s{\"type\":\"XCUIElementTypeWindow\",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},", windowCount > 0 ? "," : "", f.x, f.y, f.w, f.h);
 		puts_("\"enabled\":true,\"visible\":true,\"children\":[");
 		int siblings = 0;
 		walk(win, 0, &siblings);
+		if (siblings == 0) {  // nothing in it, so it leaves no trace
+			len = mark;
+			buf[len] = 0;
+			continue;
+		}
 		puts_("]}");
+		windowCount++;
 	}
 	puts_("]}}\n");
 }
@@ -243,7 +270,8 @@ static void write_all(int fd, const char *data, size_t n) {
 /// Runs on the main queue. It answers and closes the connection itself, so a stalled main queue costs a waiting client
 /// and nothing else.
 static void answer(void *ctx) {
-	int fd = (int)(intptr_t)ctx;
+	int fd = (int)(intptr_t)ctx & 0xffffff, debug = (int)((intptr_t)ctx >> 24);
+	g_debug = debug != 0;
 	void *pool = objc_autoreleasePoolPush();
 	build_tree();
 	objc_autoreleasePoolPop(pool);
@@ -261,8 +289,9 @@ static void *serve_client(void *arg) {
 		n++;
 	}
 	line[n] = 0;
-	if (strcmp(line, "tree") == 0) {
-		dispatch_async_f(dispatch_get_main_queue(), (void *)(intptr_t)fd, answer);
+	if (strcmp(line, "tree") == 0 || strcmp(line, "tree debug") == 0) {
+		intptr_t ctx = fd | (strcmp(line, "tree debug") == 0 ? (intptr_t)1 << 24 : 0);  // descriptors are small
+		dispatch_async_f(dispatch_get_main_queue(), (void *)ctx, answer);
 	} else {
 		write_all(fd, "{\"error\":\"unknown request\"}\n", 28);
 		close(fd);

@@ -3,18 +3,16 @@ import { createConnection } from 'node:net';
 import path from 'node:path';
 import type { AxNode, Frame } from '../types.ts';
 
-/** What one process's hook answers to `tree`. */
+export const SPRINGBOARD_BUNDLE_ID = 'com.apple.springboard';
+
+/** What one process's hook answers to `tree`. Only SpringBoard says which app is in front. */
 export type HookReply = {
   pid: number;
   bundleId: string;
-  /** The process is the front app, or SpringBoard. */
-  active: boolean;
+  /** SpringBoard only. `null` is the home screen. */
+  front?: { pid: number; bundleId: string } | null;
   root: AxNode;
 };
-
-export const SPRINGBOARD_BUNDLE_ID = 'com.apple.springboard';
-/** The keyboard's process is active whenever the keyboard is up, and is never the app being driven. */
-const SYSTEM_UI_BUNDLE_ID = /InputUI/;
 
 /** The hook names its socket `x86sim-ax-<udid>-<pid>.sock` in the phone's runtime directory. */
 const socketName = (udid: string) => new RegExp(`^x86sim-ax-${udid}-\\d+\\.sock$`);
@@ -83,47 +81,38 @@ export function parseHookReply(text: string): HookReply {
   }
   if (!isRecord(json)) fail('the reply', 'an object');
   if (typeof json.error === 'string') throw new Error(`The hook refused the request: ${json.error}`);
-  const { pid, bundleId, active } = json;
+  const { pid, bundleId, front } = json;
   if (typeof pid !== 'number' || !Number.isInteger(pid)) fail('pid', 'an integer');
   if (typeof bundleId !== 'string') fail('bundleId', 'a string');
-  if (typeof active !== 'boolean') fail('active', 'a boolean');
   const root = parseNode(json.root, 'root', 0);
   if (root.type !== 'XCUIElementTypeApplication') fail('root.type', 'XCUIElementTypeApplication');
-  return { pid, bundleId, active, root };
+  if (front === undefined || front === null) return { pid, bundleId, ...(front === null ? { front: null } : {}), root };
+  if (!isRecord(front)) fail('front', 'null or an object with pid and bundleId');
+  if (typeof front.pid !== 'number' || !Number.isInteger(front.pid)) fail('front.pid', 'an integer');
+  if (typeof front.bundleId !== 'string') fail('front.bundleId', 'a string');
+  return { pid, bundleId, front: { pid: front.pid, bundleId: front.bundleId }, root };
 }
 
-/**
- * The tree to show. An app that is in front wins over SpringBoard, because SpringBoard's windows
- * stay behind it. With no app in front the screen is the home screen, SpringBoard's.
- * Among several active apps the newest process wins, since pids grow with launch order. A process
- * with no window has nothing on screen, so it is no app in front.
- */
-export function chooseReply(replies: readonly HookReply[]): HookReply | undefined {
-  const active = replies.filter((reply) => reply.active);
-  const apps = active.filter(
-    (reply) =>
-      reply.bundleId !== SPRINGBOARD_BUNDLE_ID && !SYSTEM_UI_BUNDLE_ID.test(reply.bundleId) && reply.root.children.length > 0,
-  );
-  const newest = apps.reduce<HookReply | undefined>((best, reply) => (best && best.pid > reply.pid ? best : reply), undefined);
-  return newest ?? active.find((reply) => reply.bundleId === SPRINGBOARD_BUNDLE_ID);
-}
-
-/** Asks one hook for its tree. Rejects on a dead socket, a timeout or a malformed answer. */
-export function queryHook(socketPath: string, timeoutMs: number): Promise<HookReply> {
+/** Asks one hook for its tree. Rejects on a dead socket, a timeout, an abort or a malformed answer. */
+export function queryHook(socketPath: string, timeoutMs: number, signal: AbortSignal): Promise<HookReply> {
   return new Promise((resolve, reject) => {
     const socket = createConnection(socketPath);
     const chunks: Buffer[] = [];
-    const finish = (error?: Error) => {
-      socket.destroy();
+    const finish = (error: Error) => {
       clearTimeout(timer);
-      if (error) reject(error);
+      signal.removeEventListener('abort', onAbort);
+      socket.destroy();
+      reject(error);
     };
+    const onAbort = () => finish(new Error(`The query to ${socketPath} was abandoned.`));
     const timer = setTimeout(() => finish(new Error(`No answer from ${socketPath} in ${timeoutMs} ms.`)), timeoutMs);
+    signal.addEventListener('abort', onAbort, { once: true });
     socket.on('connect', () => socket.write('tree\n'));
     socket.on('data', (chunk: Buffer) => chunks.push(chunk));
     socket.on('error', finish);
     socket.on('close', () => {
       clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
       try {
         resolve(parseHookReply(Buffer.concat(chunks).toString('utf8')));
       } catch (error) {
@@ -133,22 +122,49 @@ export function queryHook(socketPath: string, timeoutMs: number): Promise<HookRe
   });
 }
 
+/** The first value to settle that satisfies `match`, or `undefined` once every promise has settled without one. */
+export function firstMatching<T>(promises: readonly Promise<T | undefined>[], match: (value: T) => boolean): Promise<T | undefined> {
+  return new Promise((resolve) => {
+    let pending = promises.length;
+    if (pending === 0) resolve(undefined);
+    for (const promise of promises) {
+      void promise.then((value) => {
+        if (value !== undefined && match(value)) resolve(value);
+        else if ((pending -= 1) === 0) resolve(undefined);
+      });
+    }
+  });
+}
+
+const pidOf = (name: string): number => Number(/-(\d+)\.sock$/.exec(name)?.[1]);
+
 /**
- * Asks every hook of one phone in parallel and keeps the answers that came. A socket whose process
- * has died refuses the connection, and its file is removed.
+ * The accessibility tree of what is on screen. SpringBoard names the app in front, or none for the
+ * home screen, so only SpringBoard and that app are waited for. A suspended app takes the
+ * connection and never answers, which would cost every other snapshot the full timeout. A socket
+ * whose process has died refuses the connection, and its file is removed.
  */
-export async function collectReplies(dir: string, udid: string, timeoutMs: number): Promise<HookReply[]> {
-  const names = hookSocketNames(await readdir(dir), udid);
-  const settled = await Promise.allSettled(
-    names.map(async (name) => {
-      const socketPath = path.join(dir, name);
-      try {
-        return await queryHook(socketPath, timeoutMs);
-      } catch (error) {
+export async function readFrontTree(dir: string, udid: string, timeoutMs: number): Promise<AxNode> {
+  const abort = new AbortController();
+  const queries = new Map<number, Promise<HookReply | undefined>>();
+  for (const name of hookSocketNames(await readdir(dir), udid)) {
+    const socketPath = path.join(dir, name);
+    queries.set(
+      pidOf(name),
+      queryHook(socketPath, timeoutMs, abort.signal).catch(async (error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 'ECONNREFUSED') await unlink(socketPath).catch(() => undefined);
-        throw error;
-      }
-    }),
-  );
-  return settled.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+        return undefined;
+      }),
+    );
+  }
+  try {
+    const springboard = await firstMatching([...queries.values()], (reply) => reply.bundleId === SPRINGBOARD_BUNDLE_ID);
+    if (!springboard) throw new Error(`SpringBoard's accessibility hook did not answer in ${dir}.`);
+    if (!springboard.front) return springboard.root;
+    const app = await queries.get(springboard.front.pid);
+    if (!app) throw new Error(`The front app ${springboard.front.bundleId} (pid ${springboard.front.pid}) did not answer on its hook socket.`);
+    return app.root;
+  } finally {
+    abort.abort();
+  }
 }

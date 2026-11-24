@@ -1,12 +1,14 @@
 /**
- * Milestone 2 proof: a real agent-device daemon, started in this process with the x86sim plugin,
- * drives a real iOS simulator under x86Sim through a running x86sim-webdriver server. The
- * server runs on the Linux VM and reaches this machine through `boat forward`.
+ * Live proof: a real agent-device daemon, started in this process with the x86sim plugin, drives a
+ * real iOS simulator under x86Sim through a running x86sim-webdriver server. The server runs on
+ * the Linux VM and reaches this machine through `boat forward`. The phone must have been booted
+ * with the accessibility hook (see the README), because every target here is an `@eN` ref taken
+ * from `snapshot -i`, never a coordinate.
  *
  * Run `npm run build` first, then
  * `X86SIM_WEBDRIVER_ENDPOINT=http://127.0.0.1:4723 node scripts/e2e-live.ts [outDir]`.
- * The snapshot is root-only for now, so every target here is a coordinate, not a ref.
  */
+import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -15,8 +17,6 @@ import x86sim from '../packages/plugin/dist/index.js';
 
 const endpoint = process.env.X86SIM_WEBDRIVER_ENDPOINT ?? 'http://127.0.0.1:4723';
 const outDir = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, '..', 'live-out'));
-/** The "General" row of Settings on the 402x874 point iPhone 17 Pro, as the first screenshot shows. */
-const GENERAL_ROW = { x: 200, y: 320 };
 /**
  * x86Sim shows the result of an input seconds later, because the phone is emulated, so a fixed
  * sleep is wrong. After an action the script takes screenshots until the pixels differ from the
@@ -78,6 +78,38 @@ async function settledShot(leased: Leased, name: string, before: Buffer | undefi
   return latest;
 }
 
+/** What `snapshot -i` returns for one element, as far as this script reads it. */
+type Listed = { ref?: string; type: string; label?: string; rect?: { x: number; y: number; width: number; height: number } };
+
+const LIST_TIMEOUT_MS = 90_000;
+
+/**
+ * Takes interactive snapshots until one lists an element labelled `label` and, when `absent` is
+ * given, none labelled that. A launch or a navigation animates for seconds before the new
+ * screen's elements exist, and the old screen answers until then. Prints the list it settled on.
+ */
+async function snapshotWith(leased: Leased, label: string, absent?: string): Promise<{ nodes: Listed[]; node: Listed; ms: number }> {
+  const startedAt = performance.now();
+  for (;;) {
+    const taken = performance.now();
+    const snapshot = await client.capture.snapshot({ ...leased, interactiveOnly: true });
+    const ms = Math.round(performance.now() - taken);
+    const nodes = snapshot.nodes as Listed[];
+    const node = nodes.find((candidate) => candidate.label === label && candidate.ref);
+    if (node && !(absent && nodes.some((candidate) => candidate.label === absent))) {
+      timings.push([`snapshot -i listing "${label}"`, ms]);
+      console.log(`  snapshot -i: ${nodes.length} elements in ${ms} ms, ${Math.round(performance.now() - startedAt)} ms after asking`);
+      for (const listed of nodes) {
+        const rect = listed.rect ? `${listed.rect.x},${listed.rect.y} ${listed.rect.width}x${listed.rect.height}` : '-';
+        console.log(`    @${listed.ref ?? '-'} ${listed.type} ${JSON.stringify(listed.label ?? '')} [${rect}]`);
+      }
+      return { nodes, node, ms };
+    }
+    assert.ok(performance.now() - startedAt < LIST_TIMEOUT_MS, `no element labelled "${label}" within ${LIST_TIMEOUT_MS} ms`);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+}
+
 try {
   step('allocate a lease on provider x86sim');
   const lease = await client.leases.allocate({ ...scope, platform: 'ios', device: 'x86Sim iPhone' });
@@ -85,30 +117,45 @@ try {
   console.log(`lease ${lease.leaseId} backend ${lease.backend} provider ${lease.leaseProvider}`);
   const leased: Leased = { ...scope, leaseId };
 
-  step('open com.apple.Preferences');
-  const openedAt = performance.now();
+  step('open com.apple.Preferences, then go home');
   const opened = await timed('open', () => client.apps.open({ ...leased, app: 'com.apple.Preferences' }));
   console.log(`opened ${opened.appBundleId} on ${opened.device?.name}`);
-
-  step('screenshot 1, Settings');
-  let screen = await settledShot(leased, '1-settings.png', undefined, openedAt);
-  await timed('screenshot round trip', () => snap(leased));
-
-  step(`press General at (${GENERAL_ROW.x}, ${GENERAL_ROW.y})`);
-  const pressedAt = performance.now();
-  const pressed = await timed('press', () => client.interactions.press({ ...leased, ...GENERAL_ROW }));
-  console.log(`pressed ${JSON.stringify(pressed)}`);
-
-  step('screenshot 2, after the tap');
-  screen = await settledShot(leased, '2-after-tap.png', screen, pressedAt);
-
-  step('home');
+  await snapshotWith(leased, 'General');
   const homeAt = performance.now();
-  const home = await timed('home', () => client.command.home({ ...leased }));
-  console.log(`home ${JSON.stringify(home)}`);
+  await timed('home', () => client.command.home({ ...leased }));
 
-  step('screenshot 3, after home');
-  await settledShot(leased, '3-after-home.png', screen, homeAt);
+  step('snapshot -i on the home screen');
+  // "Settings" is also the title inside the Settings app, where "General" is a row. The home screen has no such row.
+  const home = await snapshotWith(leased, 'Settings', 'General');
+  console.log(`  home screen reached ${Math.round(performance.now() - homeAt)} ms after the home press`);
+
+  step(`press the Settings icon by ref @${home.node.ref}`);
+  await timed('press Settings', () => client.interactions.press({ ...leased, ref: `@${home.node.ref}` }));
+
+  step('snapshot -i in Settings');
+  const settings = await snapshotWith(leased, 'General');
+  const shotBefore = await snap(leased);
+
+  step(`press the General row by ref @${settings.node.ref}`);
+  const pressedAt = performance.now();
+  await timed('press General', () => client.interactions.press({ ...leased, ref: `@${settings.node.ref}` }));
+
+  step('snapshot -i on the General page');
+  const general = await snapshotWith(leased, 'About');
+  assert.equal(general.nodes.some((candidate) => candidate.label === 'Software Update'), true, 'the General page lists Software Update');
+
+  step('screenshot of the General page');
+  await settledShot(leased, 'general-page.png', shotBefore, pressedAt);
+
+  step('snapshot latency, 10 round trips on the General page');
+  const samples: number[] = [];
+  for (let run = 0; run < 10; run += 1) {
+    const taken = performance.now();
+    await client.capture.snapshot({ ...leased, interactiveOnly: true });
+    samples.push(Math.round(performance.now() - taken));
+  }
+  samples.sort((a, b) => a - b);
+  console.log(`  ms sorted: ${samples.join(' ')}  median ${samples[Math.floor(samples.length / 2)]}`);
 
   step('close the session');
   console.log(`closed ${JSON.stringify(await client.sessions.close({ ...leased }))}`);
