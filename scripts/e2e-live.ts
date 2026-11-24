@@ -136,8 +136,8 @@ try {
   console.log(`lease ${lease.leaseId} backend ${lease.backend} provider ${lease.leaseProvider}`);
   const leased: Leased = { ...scope, leaseId };
 
-  step('open com.apple.Preferences, then go home');
-  const opened = await timed('open', () => client.apps.open({ ...leased, app: 'com.apple.Preferences' }));
+  step('open com.apple.Preferences from its first page, then go home');
+  const opened = await timed('open', () => client.apps.open({ ...leased, app: 'com.apple.Preferences', relaunch: true }));
   console.log(`opened ${opened.appBundleId} on ${opened.device?.name}`);
   await snapshotWith(leased, 'General');
   const homeAt = performance.now();
