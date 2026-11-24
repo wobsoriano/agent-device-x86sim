@@ -18,6 +18,9 @@ export type X86SimConfig = {
   hookSocketDir?: string;
 };
 
+/** Where the accessibility hooks bind their sockets. */
+export const defaultHookSocketDir = (): string => `/run/user/${userInfo().uid}`;
+
 const CLI_TIMEOUT_MS = 60_000;
 /** A hook that does not answer in this long fails the snapshot. A phone that is still booting answers in seconds. */
 const HOOK_TIMEOUT_MS = 5_000;
@@ -101,7 +104,7 @@ export class X86SimBackend implements Backend {
 
   async accessibilityTree(): Promise<AxNode> {
     const udid = parseSimulatorUdid(await readFile(path.join(this.#config.device, 'sim.env'), 'utf8'));
-    const dir = this.#config.hookSocketDir ?? `/run/user/${userInfo().uid}`;
+    const dir = this.#config.hookSocketDir ?? defaultHookSocketDir();
     return await readFrontTree(dir, udid, HOOK_TIMEOUT_MS);
   }
 
