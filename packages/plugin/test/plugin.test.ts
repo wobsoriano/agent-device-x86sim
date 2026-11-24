@@ -47,3 +47,12 @@ test('operations the server cannot answer are marked unsupported', async () => {
     );
   }
 });
+
+test('snapshot is marked partial with a note, because the tree is root-only', async () => {
+  const setup = await x86sim().setup(host as never);
+  assert.ok('webDriver' in setup);
+  const snapshot = setup.webDriver.capabilityOverrides?.snapshot;
+  assert.ok(typeof snapshot === 'object');
+  assert.equal(snapshot.support, 'partial');
+  assert.match(snapshot.note ?? '', /root/);
+});

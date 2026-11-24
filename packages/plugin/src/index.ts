@@ -15,6 +15,10 @@ type CapabilityOverrides = NonNullable<WebDriverPluginOptions['capabilityOverrid
  * unsupported instead of being sent to a route that cannot answer.
  */
 const CAPABILITY_OVERRIDES: CapabilityOverrides = {
+  snapshot: {
+    support: 'partial',
+    note: 'The x86sim backend returns only the root application node, so there are no elements to ref or find until its accessibility hook lands.',
+  },
   back: { support: 'unsupported', note: 'iOS has no back button and the server has no /back route.' },
   orientation: { support: 'unsupported', note: 'The server has no rotation or orientation routes.' },
   fill: { support: 'unsupported', note: 'The server has no element routes, so there is no focus to fill.' },
