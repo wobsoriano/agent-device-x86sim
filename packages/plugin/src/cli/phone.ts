@@ -1,10 +1,16 @@
+/**
+ * `none`: SpringBoard does not answer on a hook socket. `outdated`: it answers, but the phone
+ * loaded a hook that is not the one this package ships. `current`: it answers and the phone
+ * loaded the packaged hook.
+ */
+export type HookState = 'none' | 'outdated' | 'current';
+
 /** What can be seen of the phone without changing it. */
 export type PhoneState = {
   /** The simhid socket accepts a connection. */
   running: boolean;
-  /** SpringBoard answers on an accessibility hook socket. */
-  hooked: boolean;
-  /** `com.apple.Accessibility.plist` turns accessibility on. */
+  hook: HookState;
+  /** `com.apple.Accessibility.plist` turns accessibility and automation on. */
   axPrefs: boolean;
 };
 
@@ -13,9 +19,9 @@ export type Action = 'stop' | 'write-prefs' | 'boot' | 'wait-home' | 'wait-hook'
 /** What the phone is, as far as getting it ready is concerned. */
 export type Phase = 'ready' | 'stale' | 'stopped';
 
-export const phaseOf = ({ running, hooked, axPrefs }: PhoneState): Phase => {
+export const phaseOf = ({ running, hook, axPrefs }: PhoneState): Phase => {
   if (!running) return 'stopped';
-  return hooked && axPrefs ? 'ready' : 'stale';
+  return hook === 'current' && axPrefs ? 'ready' : 'stale';
 };
 
 /**
@@ -58,7 +64,9 @@ export async function preparePhone(control: PhoneControl, log: (line: string) =>
     }
     if (phase === 'stale') {
       const reasons = [
-        state.hooked ? undefined : 'load the accessibility hook',
+        state.hook === 'current'
+          ? undefined
+          : `load the ${state.hook === 'outdated' ? 'updated ' : ''}accessibility hook`,
         state.axPrefs ? undefined : 'turn on accessibility',
       ];
       log(`Restarting the phone to ${reasons.filter(Boolean).join(' and ')}.`);

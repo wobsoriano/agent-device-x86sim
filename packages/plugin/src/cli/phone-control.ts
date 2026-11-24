@@ -6,7 +6,8 @@ import { defaultHookSocketDir } from '../../../server/src/backends/x86sim.ts';
 import { parseSimulatorUdid } from '../../../server/src/backends/simhid.ts';
 import { ACCESSIBILITY_PREFS_SCRIPT } from './accessibility-prefs.ts';
 import type { Launch, X86Sim } from './install.ts';
-import type { Action, PhoneControl, PhoneState } from './phone.ts';
+import { loadedHookIsPackaged } from './hook-path.ts';
+import type { Action, HookState, PhoneControl, PhoneState } from './phone.ts';
 import { isPhoneRunning } from './running.ts';
 
 export type PhoneControlConfig = {
@@ -89,8 +90,8 @@ export function createPhoneControl(config: PhoneControlConfig): PhoneControl {
     if (finished.code !== 0) throw new Error(`x86Sim failed to ${what} (exit ${finished.code}).\n${finished.tail}`);
   }
 
-  async function isHooked(): Promise<boolean> {
-    const udid = parseSimulatorUdid(await readFile(path.join(config.device, 'sim.env'), 'utf8'));
+  async function springBoardAnswers(simEnv: string): Promise<boolean> {
+    const udid = parseSimulatorUdid(simEnv);
     const dir = config.hookSocketDir ?? defaultHookSocketDir();
     const abort = new AbortController();
     try {
@@ -106,9 +107,15 @@ export function createPhoneControl(config: PhoneControlConfig): PhoneControl {
     }
   }
 
+  async function hookState(): Promise<HookState> {
+    const simEnv = await readFile(path.join(config.device, 'sim.env'), 'utf8');
+    if (!(await springBoardAnswers(simEnv))) return 'none';
+    return (await loadedHookIsPackaged(simEnv, config.hook)) ? 'current' : 'outdated';
+  }
+
   async function waitForHook(): Promise<void> {
     const deadline = Date.now() + HOOK_WAIT_MS;
-    while (!(await isHooked())) {
+    while ((await hookState()) === 'none') {
       if (Date.now() > deadline) {
         throw new Error(
           `The phone reached the home screen, but SpringBoard's accessibility hook did not answer in ${HOOK_WAIT_MS / 1000} s. ` +
@@ -124,7 +131,7 @@ export function createPhoneControl(config: PhoneControlConfig): PhoneControl {
       const running = await isPhoneRunning(config.device);
       return {
         running,
-        hooked: running && (await isHooked()),
+        hook: running ? await hookState() : 'none',
         axPrefs: (await runPython(['check', prefsFile])) === 'true',
       };
     },
