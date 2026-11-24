@@ -1,6 +1,6 @@
 # agent-device-x86sim
 
-An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). You keep the usual agent-device commands: `open`, `snapshot -i`, `press @e3`, and `screenshot`. You do not need a Mac. In this README, "the phone" is the simulated iPhone that x86Sim runs.
+An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). In this README, "the phone" is the simulated iPhone that x86Sim runs.
 
 The plugin is not on npm yet. Until it is, install it from a local registry as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
