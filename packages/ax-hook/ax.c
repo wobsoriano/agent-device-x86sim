@@ -204,19 +204,45 @@ static const char *bundle_id(void) {
 	return id_ ? id_ : is_springboard() ? "com.apple.springboard" : getprogname();
 }
 
-/// SpringBoard only: the app in front, or null on the home screen. Foreground system UI such as the keyboard's
-/// InputUI process is not an app.
+/// Is `app`, an SBApplication, running in the foreground? On success `bundle` and `pid` say which. Foreground system
+/// UI such as the keyboard's InputUI process is not an app.
+static bool foreground_app(id app, const char **bundle, long *pid) {
+	id state = get(app, "processState");
+	const char *b = utf8(get(app, "bundleIdentifier"));
+	if (!state || !getb(state, "isForeground") || !b || strstr(b, "InputUI")) return false;
+	*bundle = b;
+	*pid = getl(state, "pid");
+	return true;
+}
+
+/// SpringBoard only: the app in front, or null on the home screen. SpringBoard names it directly when it can, and
+/// otherwise the running application that is in the foreground is the one.
 static void put_front(id springboard) {
-	id front = get(springboard, "_accessibilityFrontMostApplication");
-	id state = get(front, "processState");
-	const char *bundle = utf8(get(front, "bundleIdentifier"));
-	if (!front || !state || !getb(state, "isForeground") || !bundle || strstr(bundle, "InputUI")) {
+	const char *bundle = NULL;
+	long pid = 0;
+	bool found = foreground_app(get(springboard, "_accessibilityFrontMostApplication"), &bundle, &pid);
+	Class controllerClass = objc_getClass("SBApplicationController");
+	id running = controllerClass ? get(get((id)controllerClass, "sharedInstanceIfExists"), "runningApplications") : nil;
+	for (unsigned long i = 0, n = count(running); !found && i < n; i++) found = foreground_app(at(running, i), &bundle, &pid);
+	if (!found) {
 		puts_(",\"front\":null");
-		return;
+	} else {
+		putf(",\"front\":{\"pid\":%ld,\"bundleId\":", pid);
+		putstr(bundle);
+		puts_("}");
 	}
-	putf(",\"front\":{\"pid\":%ld,\"bundleId\":", getl(state, "pid"));
-	putstr(bundle);
-	puts_("}");
+	if (!g_debug) return;
+	puts_(",\"runningApplications\":[");
+	for (unsigned long i = 0, n = count(running); i < n; i++) {
+		id app = at(running, i), state = get(app, "processState");
+		putf("%s{\"bundleId\":", i ? "," : "");
+		putstr(utf8(get(app, "bundleIdentifier")));
+		putf(",\"pid\":%ld,\"foreground\":%s,\"state\":\"%s\"}", getl(state, "pid"), getb(state, "isForeground") ? "true" : "false",
+		     state ? object_getClassName(state) : "none");
+	}
+	puts_("]");
+	id named = get(springboard, "_accessibilityFrontMostApplication");
+	putf(",\"frontMostApplication\":\"%s\"", named ? object_getClassName(named) : "nil");
 }
 
 static void build_tree(void) {

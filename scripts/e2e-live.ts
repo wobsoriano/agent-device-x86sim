@@ -142,7 +142,7 @@ try {
 
   step('snapshot -i on the General page');
   const general = await snapshotWith(leased, 'About');
-  assert.equal(general.nodes.some((candidate) => candidate.label === 'Software Update'), true, 'the General page lists Software Update');
+  assert.equal(general.nodes.some((candidate) => candidate.label === 'Keyboard'), true, 'the General page lists Keyboard');
 
   step('screenshot of the General page');
   await settledShot(leased, 'general-page.png', shotBefore, pressedAt);
