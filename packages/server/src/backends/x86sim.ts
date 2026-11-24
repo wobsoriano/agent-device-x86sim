@@ -145,8 +145,11 @@ export class X86SimBackend implements Backend {
     await this.#cli(['launch', bundleId]);
   }
 
+  /** Ending an app that is not running is not an error, as in Appium and `simctl terminate`, so a relaunch can start from either state. */
   async terminateApp(bundleId: string): Promise<void> {
-    await this.#cli(['terminate', bundleId]);
+    await this.#cli(['terminate', bundleId]).catch((error: Error) => {
+      if (!/not running/.test(error.message)) throw error;
+    });
   }
 
   async openUrl(url: string): Promise<void> {
