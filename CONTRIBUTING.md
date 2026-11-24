@@ -42,6 +42,16 @@ node scripts/e2e-live.ts ./live-out
 
 The script opens Settings, presses Home, presses the Settings icon and the General row by `@eN` ref, and saves screenshots to `./live-out`. It waits for elements and for changed pixels, because x86Sim draws the result of an input seconds later.
 
+## Rebuild the accessibility hook
+
+Users run the prebuilt hook in `packages/ax-hook/prebuilt/libx86sim-ax.dylib`. If you change `packages/ax-hook/ax.c`, rebuild it on a Mac with Xcode and commit the new prebuilt file with the source change.
+
+```sh
+packages/ax-hook/build.sh
+cp packages/ax-hook/build/libx86sim-ax.dylib packages/ax-hook/prebuilt/
+vtool -show-build packages/ax-hook/prebuilt/libx86sim-ax.dylib   # platform IOSSIMULATOR
+```
+
 ## Hook protocol
 
 Every phone process that starts UIKit listens on `/run/user/<uid>/x86sim-ax-<SIMULATOR_UDID>-<pid>.sock`. A client sends `tree\n` and reads one JSON line, `{ pid, bundleId, root }`. The `root` field is an `AxNode` from `packages/server/src/types.ts`. The SpringBoard answer also has `front`, the app in front, or `null` on the home screen. `tree debug\n` adds the class and traits of each element.

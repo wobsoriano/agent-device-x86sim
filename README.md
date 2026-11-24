@@ -1,6 +1,6 @@
 # agent-device-x86sim
 
-An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). You keep the usual agent-device commands: `open`, `snapshot -i`, `press @e3`, and `screenshot`. No Mac runs the phone.
+An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). You keep the usual agent-device commands: `open`, `snapshot -i`, `press @e3`, and `screenshot`. You do not need a Mac.
 
 The plugin is not on npm yet. Until it is, install it from a local registry as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -20,7 +20,6 @@ agent-device + plugin  ──HTTP──▶  x86sim-webdriver  ──▶  x86Sim 
 - A Linux machine that meets [x86Sim's requirements](https://github.com/x86sim/x86sim#requirements): x86-64, glibc 2.39 or newer (Ubuntu 24.04 or newer), 8 GB of memory (16 GB recommended), and 45 GB of free disk. A GPU is optional. Without one, the phone draws in software and is slower.
 - Node.js 22.18 or newer on the Linux machine.
 - agent-device 0.21.35 or newer, on the Linux machine or on another machine.
-- A Mac with Xcode, once, to build the accessibility hook.
 
 The examples use these paths. Change them to match your machine.
 
@@ -43,12 +42,12 @@ export X86SIM_DEVICE=~/.local/share/x86sim/var/device-a64-iphone-17-pro
 
    Check: `$X86SIM x86sim device list` shows `device-a64-iphone-17-pro`.
 
-2. Build the accessibility hook on a Mac, then copy it to the Linux machine.
+2. Copy this repository to the Linux machine, and enter its folder.
+
+   The repository includes the accessibility hook, prebuilt for the iOS simulator. Save its path for step 4.
 
    ```sh
-   # on the Mac, in this repository
-   packages/ax-hook/build.sh
-   scp packages/ax-hook/build/libx86sim-ax.dylib linux-box:~/ax-hook/libx86sim-ax.dylib
+   export AX_HOOK=$PWD/packages/ax-hook/prebuilt/libx86sim-ax.dylib
    ```
 
 3. Turn on accessibility inside the phone.
@@ -69,7 +68,7 @@ export X86SIM_DEVICE=~/.local/share/x86sim/var/device-a64-iphone-17-pro
 
    ```sh
    cd ~/x86sim
-   X86SIM_INSERT=$HOME/ax-hook/libx86sim-ax.dylib A64_DEVICE=var/device-a64-iphone-17-pro A64_KEEP=1 \
+   X86SIM_INSERT=$AX_HOOK A64_DEVICE=var/device-a64-iphone-17-pro A64_KEEP=1 \
      $X86SIM shell -c cli/libexec/arm64/boot-a64.sh
    $X86SIM x86sim wait home 540
    ```
@@ -78,7 +77,7 @@ export X86SIM_DEVICE=~/.local/share/x86sim/var/device-a64-iphone-17-pro
 
    Check: `wait home` exits with code 0. A boot takes 1.5 to 6 minutes.
 
-5. Start the server from a copy of this repository.
+5. Start the server from the repository folder.
 
    ```sh
    node packages/server/src/main.ts --backend x86sim --appimage $X86SIM --device $X86SIM_DEVICE --port 4723
