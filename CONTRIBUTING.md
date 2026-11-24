@@ -58,9 +58,30 @@ cp packages/ax-hook/build/libx86sim-ax.dylib packages/ax-hook/prebuilt/
 vtool -show-build packages/ax-hook/prebuilt/libx86sim-ax.dylib   # platform IOSSIMULATOR
 ```
 
+## Compare element types with XCTest
+
+`scripts/ax-golden.ts` checks that a phone under x86Sim reports the same tree as Apple's XCTest. For each screen it compares agent-device's full `snapshot`, one line per element: the types of its ancestors, then its type, label and identifier. The fixtures in `scripts/ax-golden/` hold the XCTest side.
+
+Check a phone under x86Sim against the fixtures. The script exits 1 and prints a diff when a screen differs.
+
+```sh
+vp run agent-device-x86sim#build
+X86SIM_WEBDRIVER_ENDPOINT=http://127.0.0.1:4723 node scripts/ax-golden.ts check
+```
+
+Capture the fixtures again on a Mac, from a booted iOS simulator. This keeps the `allow` lists of each fixture.
+
+```sh
+node scripts/ax-golden.ts capture --udid <simulator udid>
+```
+
+A fixture's `allow.missing` and `allow.extra` list lines that may differ, each with a `reason`, such as a label that changed between iOS versions. Add `--screen <name>` to run one screen.
+
+The script does not compare `snapshot -i`. agent-device prunes `-i` differently for XCTest and for a WebDriver page source, so `-i` can differ when the trees are the same.
+
 ## Hook protocol
 
-Every phone process that starts UIKit listens on `/run/user/<uid>/x86sim-ax-<SIMULATOR_UDID>-<pid>.sock`. A client sends `tree\n` and reads one JSON line, `{ pid, bundleId, root }`. The `root` field is an `AxNode` from `packages/server/src/types.ts`. The SpringBoard answer also has `front`, the app in front, or `null` on the home screen. `tree debug\n` adds the class and traits of each element.
+Every phone process that starts UIKit listens on `/run/user/<uid>/x86sim-ax-<SIMULATOR_UDID>-<pid>.sock`. A client sends `tree\n` and reads one JSON line, `{ pid, bundleId, root }`. The `root` field is an `AxNode` from `packages/server/src/types.ts`. The SpringBoard answer also has `front`, the app in front, or `null` on the home screen. `tree debug\n` adds the class and traits of each element. A hook in a process where accessibility is off answers `{ error }` instead.
 
 The server asks SpringBoard first, then only the app in front. A suspended app accepts the connection and never answers.
 
