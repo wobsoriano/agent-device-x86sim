@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { parseActions, toTouchEvents } from './actions.ts';
+import type { Uploads } from './app-archive.ts';
 import { invalidArgument, invalidSessionId, sessionNotCreated, unknownCommand } from './errors.ts';
 import type { Handler, Route } from './router.ts';
 import type { Backend, HardwareButton } from './types.ts';
@@ -11,6 +12,9 @@ export type Session = { id: string; capabilities: Record<string, unknown> };
 export type SessionStore = { current: Session | undefined };
 
 const SESSION_PREFIX = '/session/:sessionId';
+
+/** Takes a zipped `.app` as the request body and answers the path it was unpacked to. */
+export const APP_UPLOAD_PATH = '/x86sim/apps';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,7 +64,7 @@ function windowRect(backend: Backend): Promise<unknown> {
 }
 
 /** The WebDriver and Appium routes this server implements. */
-export function webDriverRoutes(backend: Backend, sessions: SessionStore): Route[] {
+export function webDriverRoutes(backend: Backend, sessions: SessionStore, uploads: Uploads): Route[] {
   const inSession = (method: string, suffix: string, handler: Handler): Route => ({
     method,
     path: `${SESSION_PREFIX}${suffix}`,
@@ -72,6 +76,19 @@ export function webDriverRoutes(backend: Backend, sessions: SessionStore): Route
       method: 'GET',
       path: '/status',
       handler: async () => ({ ready: true, message: 'x86sim-webdriver ready' }),
+    },
+    {
+      // agent-device on another machine sends the app here, then installs the returned path.
+      method: 'POST',
+      path: APP_UPLOAD_PATH,
+      body: 'bytes',
+      handler: async ({ body }) => {
+        try {
+          return { appPath: await uploads.stage(body as Buffer) };
+        } catch (error) {
+          throw invalidArgument((error as Error).message);
+        }
+      },
     },
     {
       method: 'POST',
@@ -114,7 +131,12 @@ export function webDriverRoutes(backend: Backend, sessions: SessionStore): Route
       return null;
     }),
     inSession('POST', '/appium/device/install_app', async ({ body }) => {
-      await backend.installApp(requireString(body, 'appPath'));
+      const appPath = requireString(body, 'appPath');
+      try {
+        await backend.installApp(appPath);
+      } finally {
+        await uploads.release(appPath);
+      }
       return null;
     }),
     inSession('POST', '/appium/device/activate_app', async ({ body }) => {

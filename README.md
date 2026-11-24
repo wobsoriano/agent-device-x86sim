@@ -154,16 +154,22 @@ agent-device sends its commands to a WebDriver server that runs next to the simu
 
 ## Test your own app
 
-Install an arm64 iOS simulator build on the Linux machine, then open it by its bundle id.
+Install an arm64 iOS simulator build, then open it by its bundle id. The app can be a `.app` folder or a `.zip` that holds one.
 
 ```sh
-# on the Linux machine, in the folder of the AppImage
-./x86sim-0.5.3-x86_64.AppImage x86sim install ./MyApp.app
-# where agent-device runs
+agent-device install com.example.myapp ./MyApp.app.zip
 agent-device open com.example.myapp
 ```
 
-`agent-device install` sends a file path from the machine that runs agent-device. The server looks for that path on the Linux machine. So `install` works only when agent-device runs on the Linux machine.
+This works where agent-device runs, on the Linux machine or another one. The plugin sends the app to the server, and the server installs it on the phone. A `.zip` made on a Mac keeps the app's file modes, so prefer it on Windows.
+
+Check: the output says `Installed: com.example.myapp`.
+
+To install without agent-device, run x86Sim's own command on the Linux machine and name the phone. Without a name, x86Sim installs on its default phone, which is not the one the launcher creates.
+
+```sh
+~/x86sim/x86sim-0.5.3-x86_64.AppImage x86sim install "iPhone 17 Pro" ./MyApp.app
+```
 
 ## Notes for agents
 

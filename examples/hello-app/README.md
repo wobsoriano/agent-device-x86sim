@@ -6,14 +6,11 @@ The prebuilt app is attached to the [hello-app-v1 release](https://github.com/wo
 
 ## Install and drive it
 
-Run these on the Linux machine, inside WSL on Windows. Keep the files in the Linux file system (`~`), not under `/mnt/c`, so the app keeps its permissions and signature.
+Run these where agent-device runs, on the Linux machine or on another machine connected to it. Install the zip as it is. It keeps the app's file modes.
 
 ```sh
-cd ~
 gh release download hello-app-v1 --repo wobsoriano/agent-device-x86sim --pattern Hello.app.zip
-unzip -o -q Hello.app.zip
-~/x86sim/x86sim-*.AppImage x86sim install ./Hello.app
-
+agent-device install com.wobsoriano.x86sim.hello ./Hello.app.zip
 agent-device open com.wobsoriano.x86sim.hello
 agent-device snapshot -i
 ```

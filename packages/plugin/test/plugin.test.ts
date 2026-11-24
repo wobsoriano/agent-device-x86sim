@@ -57,12 +57,13 @@ test('snapshot keeps the engine default, because the tree is real', async () => 
 
 const remoteHost = { ...host, env: { X86SIM_WEBDRIVER_ENDPOINT: 'http://sim:1' } };
 
-test('with an endpoint set, a session uses the endpoint as is and starts nothing', async () => {
+test('with an endpoint set, a session uses the endpoint as is, starts nothing, and installs apps by upload', async () => {
   const setup = await x86sim().setup(remoteHost as never);
   assert.ok('webDriver' in setup);
   const base = { provider: 'x86sim', endpoint: 'http://sim:1' };
-  const prepared = await setup.webDriver.prepareSession?.({ base, lease: {} } as never);
+  const { uploadApp, ...prepared } = (await setup.webDriver.prepareSession?.({ base, lease: {} } as never)) ?? {};
   assert.deepEqual(prepared, base);
+  assert.equal(typeof uploadApp, 'function');
   await setup.dispose?.();
 });
 

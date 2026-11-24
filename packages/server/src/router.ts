@@ -2,7 +2,7 @@ import { unknownCommand } from './errors.ts';
 
 export type RouteContext = {
   params: Record<string, string>;
-  /** Parsed JSON request body, `undefined` when the request had none. */
+  /** The parsed JSON body, `undefined` when the request had none. A `bytes` route gets a `Buffer`. */
   body: unknown;
 };
 
@@ -15,6 +15,8 @@ export type Route = {
   method: string;
   /** A path with `:name` segments, such as `/session/:sessionId/source`. */
   path: string;
+  /** How the request body is read. Defaults to `json`. */
+  body?: 'json' | 'bytes';
   handler: Handler;
 };
 
