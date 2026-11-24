@@ -1,6 +1,6 @@
 {
   "name": "agent-device-x86sim",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Run an iOS simulator on Linux through x86Sim and drive it with agent-device. One package: the agent-device plugin and the `agent-device-x86sim` command.",
   "keywords": [
     "agent-device",
