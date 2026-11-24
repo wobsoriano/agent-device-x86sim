@@ -12,6 +12,7 @@ export function readyMessage(endpoint: string, device: string): string {
     `Ready. The server for the phone ${device} answers at ${endpoint}.`,
     'On the machine that runs agent-device, run:',
     '  agent-device plugins add agent-device-x86sim',
+    '  export AGENT_DEVICE_SESSION=x86sim',
     '  agent-device connect x86sim',
     `If that is another machine, forward the port first: ssh -N -L ${port}:localhost:${port} <user>@${hostname()}`,
     'Stop the server with Ctrl+C. The phone keeps running.',
