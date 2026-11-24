@@ -18,6 +18,7 @@ When agent-device runs on the Linux machine, the plugin starts the server and bo
 ## Requirements
 
 - A Linux machine that meets [x86Sim's requirements](https://github.com/x86sim/x86sim#requirements). It needs x86-64, glibc 2.39 or newer, at least 8 GB of memory, and 45 GB of free disk. Ubuntu 24.04 or newer has the right glibc. x86Sim recommends 16 GB of memory. A GPU is optional. Without one, the phone draws in software and is slower.
+- On Windows, WSL2 with Ubuntu 24.04 works. The phone draws in software there. Ubuntu's Mesa has no Vulkan driver for WSL's GPU, and Mesa 26.3 with the dozen driver reached a Radeon RX 6700 XT but scrolled Settings at 6 fps against 21 fps in software.
 - Node.js 22.18 or newer and Python 3 on the Linux machine.
 - agent-device 0.21.35 or newer, on the Linux machine or on another machine.
 
