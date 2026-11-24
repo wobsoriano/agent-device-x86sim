@@ -28,6 +28,9 @@ const MAX_TREE_DEPTH = 80;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** The hook answered with a reason instead of a tree, such as accessibility being off in the phone. */
+export class HookRefusedError extends Error {}
+
 function fail(where: string, expected: string): never {
   throw new Error(`Hook reply is malformed at ${where}, expected ${expected}.`);
 }
@@ -80,7 +83,7 @@ export function parseHookReply(text: string): HookReply {
     throw new Error(`Hook reply is not JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
   if (!isRecord(json)) fail('the reply', 'an object');
-  if (typeof json.error === 'string') throw new Error(`The hook refused the request: ${json.error}`);
+  if (typeof json.error === 'string') throw new HookRefusedError(`The hook refused the request: ${json.error}`);
   const { pid, bundleId, front } = json;
   if (typeof pid !== 'number' || !Number.isInteger(pid)) fail('pid', 'an integer');
   if (typeof bundleId !== 'string') fail('bundleId', 'a string');
@@ -153,11 +156,14 @@ const pidOf = (name: string): number => Number(/-(\d+)\.sock$/.exec(name)?.[1]);
 export async function readFrontTree(dir: string, udid: string, timeoutMs: number): Promise<AxNode> {
   const abort = new AbortController();
   const queries = new Map<number, Promise<HookReply | undefined>>();
+  /** A refusal says more than a missing answer, so it is what a failed snapshot reports. */
+  const refusals = new Map<number, HookRefusedError>();
   for (const name of hookSocketNames(await readdir(dir), udid)) {
     const socketPath = path.join(dir, name);
     queries.set(
       pidOf(name),
       queryHook(socketPath, timeoutMs, abort.signal).catch(async (error: unknown) => {
+        if (error instanceof HookRefusedError) refusals.set(pidOf(name), error);
         if (error instanceof Error && 'code' in error && error.code === 'ECONNREFUSED')
           await unlink(socketPath).catch(() => undefined);
         return undefined;
@@ -166,7 +172,8 @@ export async function readFrontTree(dir: string, udid: string, timeoutMs: number
   }
   try {
     const springboard = await firstMatching([...queries.values()], (reply) => reply.bundleId === SPRINGBOARD_BUNDLE_ID);
-    if (!springboard) throw new Error(`SpringBoard's accessibility hook did not answer in ${dir}.`);
+    if (!springboard)
+      throw refusals.values().next().value ?? new Error(`SpringBoard's accessibility hook did not answer in ${dir}.`);
     if (!springboard.front) return springboard.root;
     if (!queries.has(springboard.front.pid)) {
       throw new FrontAppNotListening(
@@ -175,8 +182,11 @@ export async function readFrontTree(dir: string, udid: string, timeoutMs: number
     }
     const app = await queries.get(springboard.front.pid);
     if (!app)
-      throw new Error(
-        `The front app ${springboard.front.bundleId} (pid ${springboard.front.pid}) did not answer on its hook socket.`,
+      throw (
+        refusals.get(springboard.front.pid) ??
+        new Error(
+          `The front app ${springboard.front.bundleId} (pid ${springboard.front.pid}) did not answer on its hook socket.`,
+        )
       );
     return app.root;
   } finally {

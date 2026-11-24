@@ -61,7 +61,7 @@ When agent-device runs on the Linux machine, the plugin starts the server and bo
 
    ```sh
    agent-device snapshot -i
-   agent-device press @e4
+   agent-device press @e8
    agent-device snapshot -i
    agent-device screenshot ./screen.png
    ```
@@ -69,11 +69,21 @@ When agent-device runs on the Linux machine, the plugin starts the server and bo
    A `snapshot -i` in Settings looks like this:
 
    ```
-   @e1 [application] "Preferences"
-   @e2 [button] "Apple Account, Sign in to access your iCloud data, the App Store, Apple services, and more."
-   @e3 [button] "General"
-   @e4 [button] "Accessibility"
+   @e1 [application] "Settings"
+   @e2 [navigation-bar] "Settings"
+   @e3 [text] "Settings"
+   @e4 [collection] "com.apple.settings.sidebar.collectionView"
+     [content below collection hidden]
+   @e5 [cell] "Apple Account"
+   @e6 [button] "Apple Account, Sign in to access your iCloud data, the App Store, Apple services, and more."
+   @e7 [cell] "General"
+   @e8 [cell] "Accessibility"
+   ...
+   @e17 [search] "Search" [editable]
+   @e20 [toolbar] "Toolbar"
    ```
+
+   The element types and containers are the ones XCTest reports on a Mac, because the hook reads the tree that UIKit builds for XCTest.
 
    Check: the second `snapshot -i` lists the rows of the page you pressed.
 
@@ -164,17 +174,17 @@ agent-device open com.example.myapp
 
 ## Troubleshooting
 
-| Symptom                                                    | Cause                                                                                | Fix                                                                                                                   |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `connect x86sim` says the server is not reachable          | agent-device runs on another machine, and the server is not running or not forwarded | Run `npx agent-device-x86sim serve` on the Linux machine. Check `curl localhost:4723/status` where agent-device runs. |
-| The plugin or `serve` says x86Sim is not set up            | The AppImage never ran on this machine, or it ran with another `X86SIM_DATA`         | Follow the [Quick start](https://github.com/x86sim/x86sim#quick-start). Use the same `X86SIM_DATA` for the plugin.    |
-| The plugin or `serve` says to pick a phone                 | There is more than one phone and none runs                                           | Run `agent-device connect x86sim --device "<name>"`, or `serve --device "<name>"`.                                    |
-| `serve` says the port is in use                            | Another server runs on that port                                                     | Stop it, or pass `--port`.                                                                                            |
-| The plugin does not start the server on the Linux machine  | `X86SIM_WEBDRIVER_ENDPOINT` is set                                                   | Unset the variable.                                                                                                   |
-| `snapshot -i` lists only `[application]`                   | The hook is not loaded, or accessibility is off                                      | Run `npx agent-device-x86sim serve` again. It stops a phone that lacks the hook and boots it again.                   |
-| `--provider-app is not supported by x86Sim`                | An old plugin sends the bundle id as `--provider-app`                                | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon.                       |
-| A screenshot shows the screen from before the last `press` | The phone has not drawn the new frame yet                                            | Wait 2 seconds and take the screenshot again.                                                                         |
-| `connect x86sim` is not a known provider                   | The daemon started before you installed the plugin                                   | Stop the agent-device daemon and run the command again.                                                               |
+| Symptom                                                                          | Cause                                                                                | Fix                                                                                                                   |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `connect x86sim` says the server is not reachable                                | agent-device runs on another machine, and the server is not running or not forwarded | Run `npx agent-device-x86sim serve` on the Linux machine. Check `curl localhost:4723/status` where agent-device runs. |
+| The plugin or `serve` says x86Sim is not set up                                  | The AppImage never ran on this machine, or it ran with another `X86SIM_DATA`         | Follow the [Quick start](https://github.com/x86sim/x86sim#quick-start). Use the same `X86SIM_DATA` for the plugin.    |
+| The plugin or `serve` says to pick a phone                                       | There is more than one phone and none runs                                           | Run `agent-device connect x86sim --device "<name>"`, or `serve --device "<name>"`.                                    |
+| `serve` says the port is in use                                                  | Another server runs on that port                                                     | Stop it, or pass `--port`.                                                                                            |
+| The plugin does not start the server on the Linux machine                        | `X86SIM_WEBDRIVER_ENDPOINT` is set                                                   | Unset the variable.                                                                                                   |
+| `snapshot -i` lists only `[application]`, or says `UIKit's accessibility is off` | The hook is not loaded, or accessibility is off                                      | Run `npx agent-device-x86sim serve` again. It stops a phone that lacks the hook and boots it again.                   |
+| `--provider-app is not supported by x86Sim`                                      | An old plugin sends the bundle id as `--provider-app`                                | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon.                       |
+| A screenshot shows the screen from before the last `press`                       | The phone has not drawn the new frame yet                                            | Wait 2 seconds and take the screenshot again.                                                                         |
+| `connect x86sim` is not a known provider                                         | The daemon started before you installed the plugin                                   | Stop the agent-device daemon and run the command again.                                                               |
 
 ## Limits
 

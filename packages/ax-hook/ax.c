@@ -12,10 +12,12 @@
 //   { "pid": 80, "bundleId": "com.apple.springboard", "front": { "pid": 123, "bundleId": "..." } | null, "root": AxNode }
 //
 // "tree debug\n" adds each element's class and accessibility traits, which a reader of the shape ignores.
-// AxNode is the shape of packages/server/src/types.ts. The walk runs on the main queue and follows UIKit's
-// accessibility containers and subviews the way VoiceOver does. The library links nothing but libobjc and libSystem,
-// so a daemon that never loads UIKit pays nothing for it. UIKit is reached through the Objective-C runtime.
+// AxNode is the shape of packages/server/src/types.ts. The tree is the snapshot UIKit builds for XCTest, taken on the
+// main queue, so element types and containers are the ones XCTest reports. UIKit builds it only while accessibility
+// automation is on. The library links nothing but libobjc and libSystem, so a daemon that never loads UIKit pays
+// nothing for it. UIKit is reached through the Objective-C runtime.
 #include <dispatch/dispatch.h>
+#include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
@@ -48,7 +50,6 @@ static bool responds(id o, const char *sel) { return o && SEND1(bool, SEL, o, "r
 static id get(id o, const char *sel) { return responds(o, sel) ? SEND(id, o, sel) : nil; }
 static bool getb(id o, const char *sel) { return responds(o, sel) && SEND(bool, o, sel); }
 static long getl(id o, const char *sel) { return responds(o, sel) ? SEND(long, o, sel) : 0; }
-static double getd(id o, const char *sel) { return responds(o, sel) ? SEND(double, o, sel) : 0; }
 static Rect getrect(id o, const char *sel) { return responds(o, sel) ? SEND(Rect, o, sel) : (Rect){ 0 }; }
 static unsigned long count(id a) { return a ? SEND(unsigned long, a, "count") : 0; }
 static id at(id a, unsigned long i) { return SEND1(id, unsigned long, a, "objectAtIndex:", i); }
@@ -105,31 +106,65 @@ static void putstr(const char *s) {
 	puts_("\"");
 }
 
-// ---- the walk ---------------------------------------------------------------------------------------------
-
+// ---- the snapshot -----------------------------------------------------------------------------------------
+//
+// XCTest does not walk views. It asks UIKit for a snapshot of the app, a tree of dictionaries that UIKit's
+// accessibility bundle builds in the app process, and reads each element's type from it. The hook asks for the same
+// snapshot, so element types and containers are UIKit's own rather than a guess from traits. The snapshot names its
+// attributes by number. These are the ones an AxNode needs.
 enum {
-	TraitButton = 1ul << 0, TraitLink = 1ul << 1, TraitImage = 1ul << 2, TraitStaticText = 1ul << 6,
-	TraitNotEnabled = 1ul << 8, TraitSearchField = 1ul << 10, TraitHeader = 1ul << 16,
-	TraitTextEntry = 1ul << 18,  // UIKit's private trait for text entry
+	AttrLabel = 2001, AttrFrame = 2003, AttrTraits = 2004, AttrValue = 2006, AttrClass = 5003, AttrBaseClass = 5004,
+	AttrIdentifier = 5019, AttrElementType = 5058,
+};
+static const long kAttributes[] = { AttrLabel, AttrFrame, AttrTraits, AttrValue, AttrClass, AttrBaseClass, AttrIdentifier, AttrElementType };
+
+enum { TraitNotEnabled = 1ul << 8 };
+enum { kAXValueCGRectType = 3 };
+
+// XCUIElementType by number, as XCUIAutomation's XCUIElementTypes.h numbers them.
+static const char *const kElementTypes[] = {
+	"Any", "Other", "Application", "Group", "Window", "Sheet", "Drawer", "Alert", "Dialog", "Button", "RadioButton",
+	"RadioGroup", "CheckBox", "DisclosureTriangle", "PopUpButton", "ComboBox", "MenuButton", "ToolbarButton", "Popover",
+	"Keyboard", "Key", "NavigationBar", "TabBar", "TabGroup", "Toolbar", "StatusBar", "Table", "TableRow", "TableColumn",
+	"Outline", "OutlineRow", "Browser", "CollectionView", "Slider", "PageIndicator", "ProgressIndicator",
+	"ActivityIndicator", "SegmentedControl", "Picker", "PickerWheel", "Switch", "Toggle", "Link", "Image", "Icon",
+	"SearchField", "ScrollView", "ScrollBar", "StaticText", "TextField", "SecureTextField", "DatePicker", "TextView",
+	"Menu", "MenuItem", "MenuBar", "MenuBarItem", "Map", "WebView", "IncrementArrow", "DecrementArrow", "Timeline",
+	"RatingIndicator", "ValueIndicator", "SplitGroup", "Splitter", "RelevanceIndicator", "ColorWell", "HelpTag", "Matte",
+	"DockItem", "Ruler", "RulerMarker", "Grid", "LevelIndicator", "Cell", "LayoutArea", "LayoutItem", "Handle", "Stepper",
+	"Tab", "TouchBar", "StatusItem",
 };
 
 static Rect g_screen;
 static int g_nodes;
 static bool g_debug;
+static id g_keyAttributes, g_keyChildren;
+static bool (*g_axValueGetValue)(id value, int type, void *out);
 
-static const char *type_of(id e, unsigned long traits) {
-	if (kind(e, "UITextField")) return getb(e, "isSecureTextEntry") ? "SecureTextField" : "TextField";
-	if (kind(e, "UITextView")) return "TextView";
-	if (kind(e, "UISwitch")) return "Switch";
-	if (kind(e, "UISlider")) return "Slider";
-	if (kind(e, "UITableViewCell") || kind(e, "UICollectionViewCell")) return "Cell";
-	if (traits & TraitSearchField) return "SearchField";
-	if (traits & TraitTextEntry) return "TextField";
-	if (traits & TraitLink) return "Link";
-	if (traits & TraitButton) return "Button";
-	if (traits & TraitImage) return "Image";
-	if (traits & (TraitStaticText | TraitHeader)) return "StaticText";
-	return "Other";
+static id nsstring(const char *s) { return SEND1(id, const char *, (id)objc_getClass("NSString"), "stringWithUTF8String:", s); }
+static id nsnumber(long n) { return SEND1(id, long, (id)objc_getClass("NSNumber"), "numberWithLong:", n); }
+static id lookup(id dict, id key) { return dict && kind(dict, "NSDictionary") ? SEND1(id, id, dict, "objectForKey:", key) : nil; }
+static id attr(id attrs, long a) { return lookup(attrs, nsnumber(a)); }
+static const char *attr_str(id attrs, long a) {
+	id v = attr(attrs, a);
+	return v && !kind(v, "NSNull") ? utf8(v) : NULL;
+}
+
+/// What XCTest reports for an element. UIKit reports a window as an application and leaves plain views as Any, which
+/// XCTest shows as Window and Other.
+static const char *type_name(id attrs) {
+	const char *base = attr_str(attrs, AttrBaseClass);
+	if (base && strcmp(base, "UIWindow") == 0) return "Window";
+	long n = getl(attr(attrs, AttrElementType), "longValue");
+	if (n <= 0 || n >= (long)(sizeof kElementTypes / sizeof *kElementTypes)) return "Other";
+	return kElementTypes[n];
+}
+
+static Rect frame_of(id attrs) {
+	Rect r = { 0 };
+	id v = attr(attrs, AttrFrame);
+	if (v && g_axValueGetValue && !g_axValueGetValue(v, kAXValueCGRectType, &r)) r = (Rect){ 0 };
+	return r;
 }
 
 static bool intersects_screen(Rect f) {
@@ -137,57 +172,43 @@ static bool intersects_screen(Rect f) {
 	       f.y + f.h > g_screen.y;
 }
 
-/// One accessibility element as a leaf node. A child that is not on screen or has no size is not worth a ref.
-static void emit_element(id e, int *siblings) {
-	Rect f = getrect(e, "accessibilityFrame");
-	if (f.w <= 0 || f.h <= 0) return;
-	if (g_nodes >= kMaxNodes) return;
+/// One snapshot dictionary as an AxNode, with its children. The root is the application.
+static void emit_node(id snap, int depth) {
 	g_nodes++;
-	unsigned long traits = (unsigned long)getl(e, "accessibilityTraits");
-	const char *label = utf8(get(e, "accessibilityLabel"));
-	const char *value = utf8(get(e, "accessibilityValue"));
-	const char *ident = utf8(get(e, "accessibilityIdentifier"));
-	bool field = kind(e, "UITextField") || kind(e, "UITextView");
-	if (field) {  // the text itself, and the placeholder as its label
-		if (!value) value = utf8(get(e, "text"));
-		if (!label) label = utf8(get(e, "placeholder"));
-	}
-	bool enabled = !(traits & TraitNotEnabled) && (!responds(e, "isEnabled") || getb(e, "isEnabled"));
-	if (*siblings > 0) puts_(",");
-	(*siblings)++;
-	putf("{\"type\":\"XCUIElementType%s\"", type_of(e, traits));
+	id attrs = lookup(snap, g_keyAttributes);
+	unsigned long traits = (unsigned long)getl(attr(attrs, AttrTraits), "unsignedLongLongValue");
+	const char *label = attr_str(attrs, AttrLabel);
+	const char *value = attr_str(attrs, AttrValue);
+	const char *ident = attr_str(attrs, AttrIdentifier);
+	Rect f = depth == 0 ? g_screen : frame_of(attrs);
+	putf("{\"type\":\"XCUIElementType%s\"", depth == 0 ? "Application" : type_name(attrs));
 	if (ident && *ident) { puts_(",\"name\":"); putstr(ident); }
 	if (label && *label) { puts_(",\"label\":"); putstr(label); }
 	if (value && *value) { puts_(",\"value\":"); putstr(value); }
 	putf(",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},\"enabled\":%s,\"visible\":%s", f.x, f.y, f.w, f.h,
-	     enabled ? "true" : "false", intersects_screen(f) ? "true" : "false");
-	if (g_debug) putf(",\"class\":\"%s\",\"traits\":%lu", object_getClassName(e), traits);
-	puts_(",\"children\":[]}");
+	     traits & TraitNotEnabled ? "false" : "true", depth == 0 || intersects_screen(f) ? "true" : "false");
+	if (g_debug) {
+		puts_(",\"class\":");
+		putstr(attr_str(attrs, AttrClass));
+		putf(",\"traits\":%lu", traits);
+	}
+	puts_(",\"children\":[");
+	id kids = lookup(snap, g_keyChildren);
+	for (unsigned long i = 0, n = kids && kind(kids, "NSArray") ? count(kids) : 0; i < n && g_nodes < kMaxNodes; i++) {
+		if (i) puts_(",");
+		emit_node(at(kids, i), depth + 1);
+	}
+	puts_("]}");
 }
 
-/// Emits the accessibility elements at or below `o` into the open children array of the caller.
-static void walk(id o, int depth, int *siblings) {
-	if (!o || depth > kMaxDepth || g_nodes >= kMaxNodes) return;
-	if (getb(o, "accessibilityElementsHidden")) return;
-	if (kind(o, "UIView") && (getb(o, "isHidden") || getd(o, "alpha") < 0.01)) return;
-	if (getb(o, "isAccessibilityElement")) {
-		emit_element(o, siblings);
-		return;
-	}
-	id kids = get(o, "accessibilityElements");
-	if (kids && count(kids) > 0) {
-		for (unsigned long i = 0, n = count(kids); i < n; i++) walk(at(kids, i), depth + 1, siblings);
-		return;
-	}
-	long n = getl(o, "accessibilityElementCount");
-	if (n > 0 && n < 100000) {
-		for (long i = 0; i < n; i++) walk(SEND1(id, long, o, "accessibilityElementAtIndex:", i), depth + 1, siblings);
-		return;
-	}
-	if (kind(o, "UIView")) {
-		id subs = get(o, "subviews");
-		for (unsigned long i = 0, m = count(subs); i < m; i++) walk(at(subs, i), depth + 1, siblings);
-	}
+/// UIKit's snapshot of the app, or nil when its accessibility bundle is not loaded because accessibility is off.
+static id app_snapshot(id app) {
+	const char *sel = "_accessibilityUserTestingSnapshotDescendantsWithAttributes:maxDepth:maxChildren:maxArrayCount:honorsModalViews:";
+	if (!responds(app, sel)) return nil;
+	id attrs = SEND(id, (id)objc_getClass("NSMutableArray"), "array");
+	for (size_t i = 0; i < sizeof kAttributes / sizeof *kAttributes; i++) SEND1(void, id, attrs, "addObject:", nsnumber(kAttributes[i]));
+	return ((id(*)(id, SEL, id, unsigned long, unsigned long, unsigned long, bool))objc_msgSend)(app, SEL_(sel), attrs, kMaxDepth,
+	                                                                                           kMaxNodes, kMaxNodes, true);
 }
 
 static id shared_application(void) {
@@ -204,12 +225,17 @@ static const char *bundle_id(void) {
 	return id_ ? id_ : is_springboard() ? "com.apple.springboard" : getprogname();
 }
 
-/// Is `app`, an SBApplication, running in the foreground? On success `bundle` and `pid` say which. Foreground system
-/// UI such as the keyboard's InputUI process is not an app.
+/// Foreground system services that SpringBoard lists among its applications: the keyboard and the home screen's
+/// widgets. Neither is the app in front.
+static const char *const kSystemServices[] = { "InputUI", "WidgetRenderer" };
+
+/// Is `app`, an SBApplication, an app running in the foreground? On success `bundle` and `pid` say which.
 static bool foreground_app(id app, const char **bundle, long *pid) {
 	id state = get(app, "processState");
 	const char *b = utf8(get(app, "bundleIdentifier"));
-	if (!state || !getb(state, "isForeground") || !b || strstr(b, "InputUI")) return false;
+	if (!state || !getb(state, "isForeground") || !b) return false;
+	for (size_t i = 0; i < sizeof kSystemServices / sizeof *kSystemServices; i++)
+		if (strstr(b, kSystemServices[i])) return false;
 	*bundle = b;
 	*pid = getl(state, "pid");
 	return true;
@@ -248,38 +274,26 @@ static void put_front(id springboard) {
 static void build_tree(void) {
 	len = 0;
 	g_nodes = 0;
+	if (!g_keyAttributes) {
+		g_keyAttributes = SEND(id, nsstring("UIAccessibilitySnapshotKeyAttributes"), "retain");
+		g_keyChildren = SEND(id, nsstring("UIAccessibilitySnapshotKeyChildren"), "retain");
+		g_axValueGetValue = (bool (*)(id, int, void *))dlsym(RTLD_DEFAULT, "AXValueGetValue");
+	}
 	id app = shared_application();
 	Class screenClass = objc_getClass("UIScreen");
 	id screen = screenClass ? get((id)screenClass, "mainScreen") : nil;
 	g_screen = getrect(screen, "bounds");
+	id snap = app_snapshot(app);
+	if (!snap) {
+		puts_("{\"error\":\"UIKit's accessibility is off in this process. Turn it on in com.apple.Accessibility.\"}\n");
+		return;
+	}
 	putf("{\"pid\":%d,\"bundleId\":", getpid());
 	putstr(bundle_id());
 	if (is_springboard()) put_front(app);
-	puts_(",\"root\":{\"type\":\"XCUIElementTypeApplication\",\"label\":");
-	putstr(getprogname());
-	putf(",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},\"enabled\":true,\"visible\":true,\"children\":[", g_screen.x,
-	     g_screen.y, g_screen.w, g_screen.h);
-	id windows = get(app, "windows");
-	int windowCount = 0;
-	for (unsigned long i = 0, n = count(windows); i < n; i++) {
-		id win = at(windows, i);
-		if (getb(win, "isHidden") || getd(win, "alpha") < 0.01) continue;
-		// A window with no element leaves no trace: it is written first, and taken back when the walk finds nothing.
-		size_t mark = len;
-		Rect f = getrect(win, "frame");
-		putf("%s{\"type\":\"XCUIElementTypeWindow\",\"frame\":{\"x\":%.2f,\"y\":%.2f,\"width\":%.2f,\"height\":%.2f},", windowCount > 0 ? "," : "", f.x, f.y, f.w, f.h);
-		puts_("\"enabled\":true,\"visible\":true,\"children\":[");
-		int siblings = 0;
-		walk(win, 0, &siblings);
-		if (siblings == 0) {  // nothing in it, so it leaves no trace
-			len = mark;
-			buf[len] = 0;
-			continue;
-		}
-		puts_("]}");
-		windowCount++;
-	}
-	puts_("]}}\n");
+	puts_(",\"root\":");
+	emit_node(snap, 0);
+	puts_("}\n");
 }
 
 // ---- the socket -------------------------------------------------------------------------------------------

@@ -147,6 +147,19 @@ test('without a SpringBoard answer there is no tree', async () => {
   });
 });
 
+test('a hook that refuses says why, in place of not answering', async () => {
+  const refusal = JSON.stringify({ error: "UIKit's accessibility is off in this process." });
+  await withHooks(async (dir, add) => {
+    await add(80, 'answer', refusal);
+    await assert.rejects(readFrontTree(dir, UDID, 5_000), /accessibility is off/);
+  });
+  await withHooks(async (dir, add) => {
+    await add(80, 'answer', springboardBody({ pid: 1817, bundleId: 'com.apple.Preferences' }));
+    await add(1817, 'answer', refusal);
+    await assert.rejects(readFrontTree(dir, UDID, 5_000), /accessibility is off/);
+  });
+});
+
 test('a stale socket file left by a dead process is removed', async () => {
   await withHooks(async (dir, add) => {
     const stale = path.join(dir, `x86sim-ax-${UDID}-999.sock`);
