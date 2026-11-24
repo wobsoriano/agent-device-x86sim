@@ -1,23 +1,23 @@
 # agent-device-x86sim
 
-An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). You keep the usual agent-device commands: `open`, `snapshot -i`, `press @e3`, and `screenshot`. You do not need a Mac.
+An [agent-device](https://github.com/callstack/agent-device) plugin that drives an iOS simulator on Linux through [x86Sim](https://github.com/x86sim/x86sim). You keep the usual agent-device commands: `open`, `snapshot -i`, `press @e3`, and `screenshot`. You do not need a Mac. In this README, "the phone" is the simulated iPhone that x86Sim runs.
 
 The plugin is not on npm yet. Until it is, install it from a local registry as described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How it fits together
 
 ```
-agent-device + plugin  ──HTTP──▶  x86sim-webdriver  ──▶  x86Sim  ──▶  iPhone simulator
+agent-device + plugin  ──HTTP──▶  x86sim-webdriver  ──▶  x86Sim  ──▶  the phone
 (any machine)                     (Linux machine)        (Linux machine)
 ```
 
 - The plugin tells agent-device where the server is.
 - The server, `x86sim-webdriver`, runs next to x86Sim. It turns agent-device's WebDriver requests into x86Sim input and screenshots.
-- The accessibility hook, `libx86sim-ax.dylib`, runs inside the phone. It gives the server the list of elements on screen, which `snapshot -i` shows.
+- The accessibility hook, `libx86sim-ax.dylib`, runs inside the phone. It gives the server the list of elements on the screen. `snapshot -i` prints that list.
 
 ## Requirements
 
-- A Linux machine that meets [x86Sim's requirements](https://github.com/x86sim/x86sim#requirements): x86-64, glibc 2.39 or newer (Ubuntu 24.04 or newer), 8 GB of memory (16 GB recommended), and 45 GB of free disk. A GPU is optional. Without one, the phone draws in software and is slower.
+- A Linux machine that meets [x86Sim's requirements](https://github.com/x86sim/x86sim#requirements): x86-64, glibc 2.39 or newer, at least 8 GB of memory, and 45 GB of free disk. Ubuntu 24.04 or newer has the right glibc. x86Sim recommends 16 GB of memory. A GPU is optional. Without one, the phone draws in software and is slower.
 - Node.js 22.18 or newer on the Linux machine.
 - agent-device 0.21.35 or newer, on the Linux machine or on another machine.
 
@@ -141,7 +141,7 @@ X86SIM_DEVICE=$X86SIM_DEVICE $X86SIM x86sim install ./MyApp.app
 agent-device open com.example.myapp
 ```
 
-`agent-device install` sends a path on the machine that runs agent-device. The server looks for that path on the Linux machine, so `install` works only when both run on the same machine.
+`agent-device install` sends a file path from the machine that runs agent-device. The server looks for that path on the Linux machine. So `install` works only when agent-device runs on the Linux machine.
 
 ## Notes for agents
 
@@ -157,7 +157,7 @@ agent-device open com.example.myapp
 | ---------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `connect x86sim` says the server is not reachable          | The server is not running, or the port is not forwarded | Start the server (Linux step 5). Check `curl localhost:4723/status` on the machine that runs agent-device. |
 | `snapshot -i` lists only `[application]`                   | The hook is not loaded, or accessibility is off         | Repeat Linux steps 3 and 4. Stop the phone first with `A64_STOP_ONLY=1` in place of `A64_KEEP=1`.          |
-| `--provider-app is not supported by x86Sim`                | The plugin version is older than this fix               | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon.            |
+| `--provider-app is not supported by x86Sim`                | An old plugin sends the bundle id as `--provider-app`   | Update the plugin with `agent-device plugins update agent-device-x86sim`, then stop the daemon.            |
 | A screenshot shows the screen from before the last `press` | The phone has not drawn the new frame yet               | Wait 2 seconds and take the screenshot again.                                                              |
 | `connect x86sim` is not a known provider                   | The daemon started before you installed the plugin      | Stop the agent-device daemon and run the command again.                                                    |
 
