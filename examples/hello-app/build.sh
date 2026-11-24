@@ -16,7 +16,8 @@ xcrun --sdk iphonesimulator swiftc -parse-as-library -O \
 cp Info.plist "$APP/Info.plist"
 codesign --force --sign - --timestamp=none "$APP"
 
-# ditto keeps permissions and the code signature intact inside the zip
-ditto -c -k --keepParent "$APP" build/Hello.app.zip
+# ditto keeps permissions and the signature. --norsrc and --noextattr keep macOS ._ metadata files out of the bundle
+xattr -cr "$APP"
+ditto -c -k --norsrc --noextattr --noacl --keepParent "$APP" build/Hello.app.zip
 vtool -show-build "$APP/Hello" | grep -E "platform|minos"
 echo "built $APP and build/Hello.app.zip"
