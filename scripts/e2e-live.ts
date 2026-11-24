@@ -5,7 +5,7 @@
  * with the accessibility hook (see the README), because every target here is an `@eN` ref taken
  * from `snapshot -i`, never a coordinate.
  *
- * Run `npm run build` first, then
+ * Run `vp run agent-device-x86sim#build` first, then
  * `X86SIM_WEBDRIVER_ENDPOINT=http://127.0.0.1:4723 node scripts/e2e-live.ts [outDir]`.
  */
 import assert from 'node:assert/strict';
@@ -13,7 +13,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startAgentDevice } from 'agent-device';
-import x86sim from '../packages/plugin/dist/index.js';
+import x86sim from 'agent-device-x86sim/agent-device';
 
 const endpoint = process.env.X86SIM_WEBDRIVER_ENDPOINT ?? 'http://127.0.0.1:4723';
 const outDir = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, '..', 'live-out'));

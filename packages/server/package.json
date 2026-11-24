@@ -2,9 +2,15 @@
   "name": "x86sim-webdriver",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "A small WebDriver server in front of an x86Sim iOS simulator backend.",
+  "type": "module",
   "scripts": {
     "start": "node src/main.ts --backend fake --port 4723"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

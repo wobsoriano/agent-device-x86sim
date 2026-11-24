@@ -1,23 +1,24 @@
 {
   "name": "agent-device-x86sim-workspace",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/plugin",
-    "packages/server"
-  ],
-  "engines": {
-    "node": ">=22.18"
-  },
-  "scripts": {
-    "build": "npm run build -w agent-device-x86sim",
-    "typecheck": "npm run build && tsc -p tsconfig.json --noEmit",
-    "test": "node --test",
-    "e2e": "npm run build && node scripts/e2e.ts"
-  },
   "devDependencies": {
-    "@types/node": "^22.20.5",
-    "agent-device": "0.21.35",
-    "typescript": "~5.9.3"
+    "@types/node": "catalog:",
+    "agent-device": "catalog:",
+    "agent-device-x86sim": "workspace:*",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.23.0",
+      "onFail": "download"
+    }
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

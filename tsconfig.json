@@ -1,5 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "noEmit": true },
-  "include": ["packages/*/src", "packages/*/test", "scripts"]
+  "compilerOptions": {
+    "paths": { "agent-device-x86sim/agent-device": ["./packages/plugin/src/index.ts"] }
+  },
+  "include": ["scripts", "vite.config.ts"]
 }

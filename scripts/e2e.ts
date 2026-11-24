@@ -3,7 +3,7 @@
  * plugin, drives the fake WebDriver server through open, snapshot, press and close. The fake
  * server's own log then shows the touch that landed.
  *
- * Run `npm run build` first, then `node scripts/e2e.ts`.
+ * Run it with `vp run e2e`, which builds the plugin first.
  */
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -13,7 +13,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { startAgentDevice } from 'agent-device';
-import x86sim from '../packages/plugin/dist/index.js';
+import x86sim from 'agent-device-x86sim/agent-device';
 
 type FakeCall = { seq: number; call: string; args: { events?: Array<{ kind: string; at?: { x: number; y: number } }> } };
 

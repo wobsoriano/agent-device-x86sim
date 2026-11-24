@@ -2,17 +2,27 @@
   "name": "agent-device-x86sim",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "agent-device provider plugin for x86Sim, driving an iOS simulator through the x86sim-webdriver server.",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
   "exports": {
     "./agent-device": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "vp pack",
+    "dev": "vp pack --watch"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "agent-device": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "agent-device": ">=0.21.35"
