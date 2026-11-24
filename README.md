@@ -5,14 +5,18 @@ Let [agent-device](https://github.com/callstack/agent-device) drive an iOS simul
 Milestone 1 proves the plumbing against a fake simulator backend. Milestone 2 adds the real x86Sim backend and a live run against an iPhone 17 Pro on a Linux VM. Milestone 3 reads the accessibility tree inside the phone, so `snapshot -i` lists real elements and `@eN` refs press them.
 
 - `packages/server` is `x86sim-webdriver`, a small WebDriver server. It owns the protocol. A `Backend` owns the simulator, and input reaches it as a stream of `down`, `move`, `up` and `pause` touch events.
-- `packages/ax-hook` is `libx86sim-ax.dylib`, a small iOS-simulator library that runs inside the phone and answers accessibility queries on a Unix socket.
+- `packages/ax-hook` is `libx86sim-ax.dylib`, a small iOS-simulator library that runs inside the phone and answers accessibility queries on a Unix socket. It is C built on a Mac with `build.sh`, so it is not a pnpm workspace package.
 - `packages/plugin` is `agent-device-x86sim`, an agent-device provider plugin (`apiVersion` 2) that points the WebDriver engine at that server.
 
+This is a [Vite+](https://viteplus.dev) monorepo on pnpm workspaces. Install the `vp` CLI once, then run everything through it.
+
 ```sh
-npm install
-npm test                 # node --test, unit tests and an HTTP round trip
-npm run typecheck
-npm run e2e              # builds the plugin, then runs scripts/e2e.ts
+vp install
+vp check                 # format, lint and type checks
+vp run -r test           # unit tests and an HTTP round trip, in vitest
+vp run -r build          # bundles the plugin to packages/plugin/dist with vp pack
+vp run e2e               # builds the plugin, then runs scripts/e2e.ts
+vp run ready             # check, test and build, the same gate in one go
 node packages/server/src/main.ts --backend fake --port 4723
 ```
 
@@ -28,7 +32,7 @@ node packages/server/src/main.ts --backend x86sim --appimage ~/x86sim/x86sim-0.5
   --device ~/.local/share/x86sim/var/device-a64-iphone-17-pro --port 4723
 # on the Mac
 boat forward <sandbox> --remote 4723 --local 4723 &
-npm run build && node scripts/e2e-live.ts [outDir]   # screenshots land in live-out/ by default
+vp run agent-device-x86sim#build && node scripts/e2e-live.ts [outDir]   # screenshots land in live-out/ by default
 ```
 
 ### The accessibility hook
